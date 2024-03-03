@@ -1,12 +1,14 @@
 ComfyUI/__pycache__/
 *.py[cod]
 ComfyUI/output/*
+!ComfyUI/output/_output_texts_will_be_put_here
 ComfyUI/input/*
-!/input/_put_input_text_here.txt
-!/input/A Short History of the World, by HG Wells, Abridged to Chapter 3.txt
+!ComfyUI/input/_put_input_text_here.txt
+!ComfyUI/input/A Short History of the World, by HG Wells, Abridged to Chapter 3.txt
 ComfyUI/models/llm/*
-!/models/llm/put_llms_here.txt
+!ComfyUI/models/llm/put_llms_here.txt
 debug_logs/*
+!debug_logs/_debug_logs_here.txt
 ComfyUI/script_examples/*
 python_embeded/Lib/*
 ComfyUI/extra_model_paths.yaml
@@ -15,6 +17,6 @@ ComfyUI/extra_model_paths.yaml
 myenv/
 update/
 ComfyUI/web/extensions/*
-!/web/extensions/logging.js.example
-!/web/extensions/core/
+!ComfyUI/web/extensions/logging.js.example
+!ComfyUI/web/extensions/core/
 ComfyUI/tests-ui/data/object_info.json

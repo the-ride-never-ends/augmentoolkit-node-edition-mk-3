@@ -1,0 +1,25 @@
+torch
+torchsde
+torchvision
+einops
+transformers>=4.25.1
+safetensors>=0.3.0
+#scikit-build Note: Installed externally in the batch file
+#scikit-build-core Note: Installed externally in the batch file
+#protobuf Note: Installed externally in the batch file
+aiohttp
+accelerate
+pyyaml
+Pillow
+scipy
+tqdm
+psutil
+#llama-cpp-python Note: Installed externally in the batch file
+tqdm
+nltk
+matplotlib
+sentencepiece
+#aphrodite
+#aphrodite-engine
+#openai>=0.10.2
+#together>=0.1.5

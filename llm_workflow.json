@@ -1,0 +1,905 @@
+{
+  "last_node_id": 91,
+  "last_link_id": 103,
+  "nodes": [
+    {
+      "id": 54,
+      "type": "TokenizerLoaderSimple",
+      "pos": [
+        -297,
+        1778
+      ],
+      "size": {
+        "0": 315,
+        "1": 58
+      },
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "outputs": [
+        {
+          "name": "TOKENIZER",
+          "type": "TOKENIZER",
+          "links": [
+            59
+          ],
+          "shape": 3,
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "TokenizerLoaderSimple"
+      },
+      "widgets_values": [
+        "test_2_tokenizer.json"
+      ]
+    },
+    {
+      "id": 74,
+      "type": "ChunkSentence",
+      "pos": [
+        119,
+        1662
+      ],
+      "size": {
+        "0": 315,
+        "1": 78
+      },
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "raw_text",
+          "type": "RAW_TEXT",
+          "link": 72,
+          "slot_index": 0
+        },
+        {
+          "name": "tokenizer",
+          "type": "TOKENIZER",
+          "link": 59,
+          "slot_index": 1
+        }
+      ],
+      "outputs": [
+        {
+          "name": "CLEANED_TEXT",
+          "type": "CLEANED_TEXT",
+          "links": [
+            61
+          ],
+          "shape": 3,
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "ChunkSentence"
+      },
+      "widgets_values": [
+        400
+      ]
+    },
+    {
+      "id": 80,
+      "type": "InputTextLoaderSimple",
+      "pos": [
+        -428,
+        1500
+      ],
+      "size": {
+        "0": 500.7221984863281,
+        "1": 125.91259765625
+      },
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "outputs": [
+        {
+          "name": "RAW_TEXT",
+          "type": "RAW_TEXT",
+          "links": [
+            72
+          ],
+          "shape": 3,
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "InputTextLoaderSimple"
+      },
+      "widgets_values": [
+        "A Short History of the World, by HG Wells, published 1922.txt"
+      ]
+    },
+    {
+      "id": 53,
+      "type": "LlmModelLoaderSimple",
+      "pos": [
+        640,
+        2668
+      ],
+      "size": {
+        "0": 315,
+        "1": 202
+      },
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "reload_model",
+          "type": "RELOAD_MODEL",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            66
+          ],
+          "shape": 3,
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LlmModelLoaderSimple"
+      },
+      "widgets_values": [
+        null,
+        8,
+        "True",
+        12000,
+        0.33,
+        100,
+        "True"
+      ]
+    },
+    {
+      "id": 67,
+      "type": "DisplayOutputText",
+      "pos": [
+        425,
+        1325
+      ],
+      "size": {
+        "0": 453.7152404785156,
+        "1": 244.37051391601562
+      },
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "output_text",
+          "type": "OUTPUT_TEXT",
+          "link": 57,
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "DisplayOutputText"
+      }
+    },
+    {
+      "id": 83,
+      "type": "GroupVettedTuplesByText",
+      "pos": [
+        2533,
+        1893
+      ],
+      "size": {
+        "0": 355.20001220703125,
+        "1": 58
+      },
+      "flags": {},
+      "order": 13,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "vetted_qa_tuples",
+          "type": "OUTPUT_TEXT",
+          "link": 77,
+          "slot_index": 0
+        }
+      ],
+      "outputs": [
+        {
+          "name": "OUTPUT_TEXT",
+          "type": "OUTPUT_TEXT",
+          "links": [
+            82
+          ],
+          "shape": 3
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "GroupVettedTuplesByText"
+      },
+      "widgets_values": [
+        "False"
+      ]
+    },
+    {
+      "id": 86,
+      "type": "ReturnMultiturnConversationInfo",
+      "pos": [
+        2934,
+        1898
+      ],
+      "size": {
+        "0": 468.5999755859375,
+        "1": 150
+      },
+      "flags": {},
+      "order": 15,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "qa_tuples_by_paragraph ",
+          "type": "OUTPUT_TEXT",
+          "link": 82,
+          "slot_index": 0
+        },
+        {
+          "name": "logic_initialized_model",
+          "type": "INITIALIZED_MODEL",
+          "link": 83,
+          "slot_index": 1
+        }
+      ],
+      "outputs": [
+        {
+          "name": "OUTPUT_TEXT",
+          "type": "OUTPUT_TEXT",
+          "links": [
+            85,
+            87
+          ],
+          "shape": 3
+        },
+        {
+          "name": "PURGE_TRIGGER",
+          "type": "PURGE_TRIGGER",
+          "links": [],
+          "shape": 3,
+          "slot_index": 1
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "ReturnMultiturnConversationInfo"
+      },
+      "widgets_values": [
+        "multi_turn_convs_info_dir",
+        "Off",
+        0,
+        "Off"
+      ]
+    },
+    {
+      "id": 85,
+      "type": "MakeDatasetMultiturnConversationSimple",
+      "pos": [
+        3437,
+        2069
+      ],
+      "size": {
+        "0": 456.0807189941406,
+        "1": 513.7672729492188
+      },
+      "flags": {},
+      "order": 16,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "logic_initialized_model",
+          "type": "INITIALIZED_MODEL",
+          "link": 86,
+          "slot_index": 0
+        },
+        {
+          "name": "multi_turn_convs_info",
+          "type": "OUTPUT_TEXT",
+          "link": 85,
+          "slot_index": 1
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MakeDatasetMultiturnConversationSimple"
+      },
+      "widgets_values": [
+        "multi_turn_convs_info_dir",
+        "multi_turn_convs_dir",
+        "False"
+      ]
+    },
+    {
+      "id": 88,
+      "type": "GenerateQATuplesAdvanced",
+      "pos": [
+        1468,
+        1702
+      ],
+      "size": {
+        "0": 519,
+        "1": 170
+      },
+      "flags": {},
+      "order": 8,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "filtered_worthy_for_questions",
+          "type": "OUTPUT_TEXT",
+          "link": 91,
+          "slot_index": 0
+        },
+        {
+          "name": "logic_initialized_model",
+          "type": "INITIALIZED_MODEL",
+          "link": 92,
+          "slot_index": 1
+        },
+        {
+          "name": "override_llm_presets",
+          "type": "OVERRIDE_LLM_PRESETS_CHOICE",
+          "link": 93,
+          "slot_index": 2
+        }
+      ],
+      "outputs": [
+        {
+          "name": "OUTPUT_TEXT",
+          "type": "OUTPUT_TEXT",
+          "links": [
+            90,
+            95,
+            102
+          ],
+          "shape": 3,
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "GenerateQATuplesAdvanced"
+      },
+      "widgets_values": [
+        "qatuples_raw",
+        "question_plan_generations",
+        "question_generation_generations",
+        3
+      ]
+    },
+    {
+      "id": 69,
+      "type": "DisplayOutputText",
+      "pos": [
+        1530,
+        1188
+      ],
+      "size": {
+        "0": 411.0836486816406,
+        "1": 311.0281982421875
+      },
+      "flags": {},
+      "order": 10,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "output_text",
+          "type": "OUTPUT_TEXT",
+          "link": 95,
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "DisplayOutputText"
+      }
+    },
+    {
+      "id": 77,
+      "type": "DisplayOutputText",
+      "pos": [
+        2045,
+        1196
+      ],
+      "size": {
+        "0": 411.0836486816406,
+        "1": 311.0281982421875
+      },
+      "flags": {},
+      "order": 12,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "output_text",
+          "type": "OUTPUT_TEXT",
+          "link": 65,
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "DisplayOutputText"
+      }
+    },
+    {
+      "id": 90,
+      "type": "WriteOutputToFile",
+      "pos": [
+        1588,
+        1553
+      ],
+      "size": {
+        "0": 315,
+        "1": 58
+      },
+      "flags": {},
+      "order": 11,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "output_texts",
+          "type": "OUTPUT_TEXT",
+          "link": 102,
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "WriteOutputToFile"
+      },
+      "widgets_values": [
+        "augmentoolkit"
+      ]
+    },
+    {
+      "id": 91,
+      "type": "WriteOutputToFile",
+      "pos": [
+        2105,
+        1598
+      ],
+      "size": {
+        "0": 315,
+        "1": 58
+      },
+      "flags": {},
+      "order": 14,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "output_texts",
+          "type": "OUTPUT_TEXT",
+          "link": 103,
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "WriteOutputToFile"
+      },
+      "widgets_values": [
+        "augmentoolkit"
+      ]
+    },
+    {
+      "id": 76,
+      "type": "ReviseQATuples",
+      "pos": [
+        2027,
+        1784
+      ],
+      "size": {
+        "0": 443.4000244140625,
+        "1": 78
+      },
+      "flags": {},
+      "order": 9,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "vetted_qa_tuples",
+          "type": "OUTPUT_TEXT",
+          "link": 90,
+          "slot_index": 0
+        },
+        {
+          "name": "logic_initialized_model",
+          "type": "INITIALIZED_MODEL",
+          "link": 71,
+          "slot_index": 1
+        }
+      ],
+      "outputs": [
+        {
+          "name": "OUTPUT_TEXT",
+          "type": "OUTPUT_TEXT",
+          "links": [
+            65,
+            77,
+            103
+          ],
+          "shape": 3,
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "ReviseQATuples"
+      },
+      "widgets_values": [
+        "qatuples_revised"
+      ]
+    },
+    {
+      "id": 87,
+      "type": "DisplayOutputText",
+      "pos": [
+        2916,
+        1569
+      ],
+      "size": {
+        "0": 487.09033203125,
+        "1": 265.1269836425781
+      },
+      "flags": {},
+      "order": 17,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "output_text",
+          "type": "OUTPUT_TEXT",
+          "link": 87,
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "DisplayOutputText"
+      }
+    },
+    {
+      "id": 82,
+      "type": "FilterAndGraph",
+      "pos": [
+        926,
+        1518
+      ],
+      "size": {
+        "0": 453.63916015625,
+        "1": 350.7234802246094
+      },
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "judged_worthy_for_questions",
+          "type": "OUTPUT_TEXT",
+          "link": 74,
+          "slot_index": 0
+        }
+      ],
+      "outputs": [
+        {
+          "name": "OUTPUT_TEXT",
+          "type": "OUTPUT_TEXT",
+          "links": [
+            91
+          ],
+          "shape": 3,
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "FilterAndGraph"
+      },
+      "widgets_values": [
+        400
+      ]
+    },
+    {
+      "id": 72,
+      "type": "JudgeParagraphs",
+      "pos": [
+        485,
+        1746
+      ],
+      "size": {
+        "0": 393,
+        "1": 122
+      },
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "cleaned_text",
+          "type": "CLEANED_TEXT",
+          "link": 61,
+          "slot_index": 0
+        },
+        {
+          "name": "initialized_model",
+          "type": "INITIALIZED_MODEL",
+          "link": 68
+        },
+        {
+          "name": "overide_llm_presets",
+          "type": "OVERRIDE_LLM_PRESETS_CHOICE",
+          "link": 67
+        }
+      ],
+      "outputs": [
+        {
+          "name": "OUTPUT_TEXT",
+          "type": "OUTPUT_TEXT",
+          "links": [
+            57,
+            74
+          ],
+          "shape": 3,
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "JudgeParagraphs"
+      },
+      "widgets_values": [
+        "True",
+        399
+      ]
+    },
+    {
+      "id": 79,
+      "type": "InitializeLlm",
+      "pos": [
+        1027,
+        2545
+      ],
+      "size": {
+        "0": 363.13995361328125,
+        "1": 296.80975341796875
+      },
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 66,
+          "slot_index": 0
+        }
+      ],
+      "outputs": [
+        {
+          "name": "INITIALIZED_MODEL",
+          "type": "INITIALIZED_MODEL",
+          "links": [
+            68,
+            71,
+            83,
+            86,
+            92
+          ],
+          "shape": 3,
+          "slot_index": 0
+        },
+        {
+          "name": "OVERRIDE_LLM_PRESETS_CHOICE",
+          "type": "OVERRIDE_LLM_PRESETS_CHOICE",
+          "links": [
+            67,
+            93
+          ],
+          "shape": 3,
+          "slot_index": 1
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "InitializeLlm"
+      },
+      "widgets_values": [
+        6000,
+        "[\"</s>\", \"# Input:\"]",
+        "True",
+        0,
+        40,
+        1,
+        0,
+        490,
+        "Logic",
+        "False"
+      ]
+    }
+  ],
+  "links": [
+    [
+      57,
+      72,
+      0,
+      67,
+      0,
+      "OUTPUT_TEXT"
+    ],
+    [
+      59,
+      54,
+      0,
+      74,
+      1,
+      "TOKENIZER"
+    ],
+    [
+      61,
+      74,
+      0,
+      72,
+      0,
+      "CLEANED_TEXT"
+    ],
+    [
+      65,
+      76,
+      0,
+      77,
+      0,
+      "OUTPUT_TEXT"
+    ],
+    [
+      66,
+      53,
+      0,
+      79,
+      0,
+      "MODEL"
+    ],
+    [
+      67,
+      79,
+      1,
+      72,
+      2,
+      "OVERRIDE_LLM_PRESETS_CHOICE"
+    ],
+    [
+      68,
+      79,
+      0,
+      72,
+      1,
+      "INITIALIZED_MODEL"
+    ],
+    [
+      71,
+      79,
+      0,
+      76,
+      1,
+      "INITIALIZED_MODEL"
+    ],
+    [
+      72,
+      80,
+      0,
+      74,
+      0,
+      "RAW_TEXT"
+    ],
+    [
+      74,
+      72,
+      0,
+      82,
+      0,
+      "OUTPUT_TEXT"
+    ],
+    [
+      77,
+      76,
+      0,
+      83,
+      0,
+      "OUTPUT_TEXT"
+    ],
+    [
+      82,
+      83,
+      0,
+      86,
+      0,
+      "OUTPUT_TEXT"
+    ],
+    [
+      83,
+      79,
+      0,
+      86,
+      1,
+      "INITIALIZED_MODEL"
+    ],
+    [
+      85,
+      86,
+      0,
+      85,
+      1,
+      "OUTPUT_TEXT"
+    ],
+    [
+      86,
+      79,
+      0,
+      85,
+      0,
+      "INITIALIZED_MODEL"
+    ],
+    [
+      87,
+      86,
+      0,
+      87,
+      0,
+      "OUTPUT_TEXT"
+    ],
+    [
+      90,
+      88,
+      0,
+      76,
+      0,
+      "OUTPUT_TEXT"
+    ],
+    [
+      91,
+      82,
+      0,
+      88,
+      0,
+      "OUTPUT_TEXT"
+    ],
+    [
+      92,
+      79,
+      0,
+      88,
+      1,
+      "INITIALIZED_MODEL"
+    ],
+    [
+      93,
+      79,
+      1,
+      88,
+      2,
+      "OVERRIDE_LLM_PRESETS_CHOICE"
+    ],
+    [
+      95,
+      88,
+      0,
+      69,
+      0,
+      "OUTPUT_TEXT"
+    ],
+    [
+      102,
+      88,
+      0,
+      90,
+      0,
+      "OUTPUT_TEXT"
+    ],
+    [
+      103,
+      76,
+      0,
+      91,
+      0,
+      "OUTPUT_TEXT"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {},
+  "version": 0.4
+}

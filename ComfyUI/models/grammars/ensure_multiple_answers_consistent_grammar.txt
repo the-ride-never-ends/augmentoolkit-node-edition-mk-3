@@ -1,0 +1,13 @@
+root ::= sequential-matching-section accuracy-check-section conclusion-section
+
+sequential-matching-section ::= "## Sequential Matching of Questions in the Conversation:\n### Sequence and Phrasing of Questions:\n" matching-statement+
+
+accuracy-check-section ::= "## Accuracy Check for Answers in the Conversation:\n### Matching Answers with Provided Content:\n" accuracy-statement+
+
+conclusion-section ::= "## Conclusion:\n" conclusion-statement+
+
+number ::= [1-9]
+matching-statement ::= number ". " [^\n]+ "\n"
+accuracy-statement ::= number ". " [^\n]+ "\n"
+conclusion-statement ::= "  - " [^\n]+ "\n"
+final-judgement ::= "  - Final Judgment:" [^\n]+

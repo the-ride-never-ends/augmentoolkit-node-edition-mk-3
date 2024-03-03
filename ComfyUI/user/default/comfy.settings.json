@@ -1,0 +1,12 @@
+{
+    "Comfy.DevMode": true,
+    "Comfy.DisableSliders": false,
+    "Comfy.Logging.Enabled": true,
+    "Comfy.DisableFloatRounding": false,
+    "Comfy.InvertMenuScrolling": false,
+    "Comfy.PromptFilename": true,
+    "Comfy.ConfirmClear": true,
+    "Comfy.MenuPosition": false,
+    "Comfy.CustomColorPalettes": "[object Object]",
+    "Comfy.ColorPalette": "dark"
+}

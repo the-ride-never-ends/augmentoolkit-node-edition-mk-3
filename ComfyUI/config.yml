@@ -1,0 +1,22 @@
+# Augmentoolkit config.
+PATH:
+  INPUT: "./input"
+  OUTPUT: "./output"
+  DEFAULT_PROMPTS: "./models/prompts" # the baseline prompt folder that Augmentoolkit falls back to if it can't find a step in the PROMPTS path
+  PROMPTS: "./models/prompts" # Where Augmentoolkit first looks for prompts
+API:
+  API_KEY: ""
+  BASE_URL: "https://api.mistral.ai/v1/"
+  LOGICAL_MODEL: "mistral-large" #Not used in Comfy, as you can select the model in the UI directly.
+  LARGE_LOGICAL_MODEL: "mistral-large" #Not used in Comfy, as you can select the model in the UI directly.
+SYSTEM:
+  USE_FILENAMES: False
+  ASSISTANT_MODE: False 
+  DEBUG_MODE: True
+  DOUBLE_CHECK_COUNTER: 3
+  USE_SUBSET: True
+  REARRANGEMENTS_TO_TAKE: 3
+  CONCURRENCY_LIMIT: 90
+  COMPLETION_MODE: False
+  MODE: "api" # can be one of "api"|"aphrodite"|"llamacpp" Currently redundant due to mode being chosen implicitly by which loader node is used.
+  GRAPH: False

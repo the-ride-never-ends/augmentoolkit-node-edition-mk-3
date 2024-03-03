@@ -1,0 +1,405 @@
+{
+  "last_node_id": 126,
+  "last_link_id": 182,
+  "nodes": [
+    {
+      "id": 108,
+      "type": "JudgeParagraphs",
+      "pos": [
+        643,
+        1572
+      ],
+      "size": {
+        "0": 317.4000244140625,
+        "1": 98
+      },
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "cleaned_paragraphs",
+          "type": "TUPLE",
+          "link": 146,
+          "slot_index": 0
+        },
+        {
+          "name": "initialized_model",
+          "type": "INITIALIZED_MODEL",
+          "link": 174,
+          "slot_index": 1
+        },
+        {
+          "name": "overide_llm_presets",
+          "type": "OVERRIDE_LLM_PRESETS_CHOICE",
+          "link": 175,
+          "slot_index": 2
+        }
+      ],
+      "outputs": [
+        {
+          "name": "TUPLE",
+          "type": "TUPLE",
+          "links": [
+            181
+          ],
+          "shape": 3,
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "JudgeParagraphs"
+      },
+      "widgets_values": [
+        "False"
+      ]
+    },
+    {
+      "id": 105,
+      "type": "ChunkSentence",
+      "pos": [
+        233,
+        1574
+      ],
+      "size": {
+        "0": 315,
+        "1": 78
+      },
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "raw_text",
+          "type": "RAW_TEXT",
+          "link": 135,
+          "slot_index": 0
+        },
+        {
+          "name": "tokenizer",
+          "type": "TOKENIZER",
+          "link": 136,
+          "slot_index": 1
+        }
+      ],
+      "outputs": [
+        {
+          "name": "paragraphs",
+          "type": "TUPLE",
+          "links": [
+            146
+          ],
+          "shape": 3,
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "ChunkSentence"
+      },
+      "widgets_values": [
+        400
+      ]
+    },
+    {
+      "id": 80,
+      "type": "InputTextLoaderSimple",
+      "pos": [
+        -367,
+        1497
+      ],
+      "size": {
+        "0": 531.17626953125,
+        "1": 58
+      },
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "outputs": [
+        {
+          "name": "RAW_TEXT",
+          "type": "RAW_TEXT",
+          "links": [
+            135
+          ],
+          "shape": 3,
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "InputTextLoaderSimple"
+      },
+      "widgets_values": [
+        "A Short History of the World, by HG Wells, Abridged to Chapter 8.txt"
+      ]
+    },
+    {
+      "id": 54,
+      "type": "TokenizerLoaderSimple",
+      "pos": [
+        -435,
+        1619
+      ],
+      "size": {
+        "0": 597.0502319335938,
+        "1": 68.08154296875
+      },
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "outputs": [
+        {
+          "name": "TOKENIZER",
+          "type": "TOKENIZER",
+          "links": [
+            136
+          ],
+          "shape": 3,
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "TokenizerLoaderSimple"
+      },
+      "widgets_values": [
+        "E:\\AI_TEMP\\augmentoolkit-node-edition-mk-2\\ComfyUI\\models\\tokenizers"
+      ]
+    },
+    {
+      "id": 114,
+      "type": "LlmModelLoaderSimple",
+      "pos": [
+        -247,
+        1988
+      ],
+      "size": {
+        "0": 380.6452941894531,
+        "1": 233.8732147216797
+      },
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            173
+          ],
+          "shape": 3,
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LlmModelLoaderSimple"
+      },
+      "widgets_values": [
+        "flatorcamaid-13b-v0.2.Q8_0.gguf",
+        8,
+        "True",
+        12000,
+        0.33,
+        100,
+        "False"
+      ]
+    },
+    {
+      "id": 125,
+      "type": "InitializeLlm",
+      "pos": [
+        224,
+        1996
+      ],
+      "size": {
+        "0": 418.1999816894531,
+        "1": 270
+      },
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 173,
+          "slot_index": 0
+        }
+      ],
+      "outputs": [
+        {
+          "name": "INITIALIZED_MODEL",
+          "type": "INITIALIZED_MODEL",
+          "links": [
+            174
+          ],
+          "shape": 3,
+          "slot_index": 0
+        },
+        {
+          "name": "OVERRIDE_LLM_PRESETS_CHOICE",
+          "type": "OVERRIDE_LLM_PRESETS_CHOICE",
+          "links": [
+            175
+          ],
+          "shape": 3,
+          "slot_index": 1
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "InitializeLlm"
+      },
+      "widgets_values": [
+        6000,
+        "[\"</s>\", \"# Input:\"]",
+        "True",
+        0,
+        40,
+        1,
+        0,
+        0,
+        "False"
+      ]
+    },
+    {
+      "id": 126,
+      "type": "FilterAndGraph",
+      "pos": [
+        1028,
+        1563
+      ],
+      "size": [
+        727.3992885253892,
+        575.8430589843742
+      ],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "judged_worthy_for_questions",
+          "type": "TUPLE",
+          "link": 181,
+          "slot_index": 0
+        }
+      ],
+      "outputs": [
+        {
+          "name": "filtered_worthy_for_questions",
+          "type": "TUPLE",
+          "links": [
+            182
+          ],
+          "shape": 3,
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "FilterAndGraph"
+      }
+    },
+    {
+      "id": 101,
+      "type": "WriteOutputToFile",
+      "pos": [
+        1887,
+        1331
+      ],
+      "size": {
+        "0": 315,
+        "1": 102
+      },
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "output_text",
+          "type": "OUTPUT_TEXT",
+          "link": null,
+          "slot_index": 0
+        },
+        {
+          "name": "output_tuple",
+          "type": "TUPLE",
+          "link": 182
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "WriteOutputToFile"
+      },
+      "widgets_values": [
+        "FilterAndGraph_Test",
+        "txt"
+      ]
+    }
+  ],
+  "links": [
+    [
+      135,
+      80,
+      0,
+      105,
+      0,
+      "RAW_TEXT"
+    ],
+    [
+      136,
+      54,
+      0,
+      105,
+      1,
+      "TOKENIZER"
+    ],
+    [
+      146,
+      105,
+      0,
+      108,
+      0,
+      "TUPLE"
+    ],
+    [
+      173,
+      114,
+      0,
+      125,
+      0,
+      "MODEL"
+    ],
+    [
+      174,
+      125,
+      0,
+      108,
+      1,
+      "INITIALIZED_MODEL"
+    ],
+    [
+      175,
+      125,
+      1,
+      108,
+      2,
+      "OVERRIDE_LLM_PRESETS_CHOICE"
+    ],
+    [
+      181,
+      108,
+      0,
+      126,
+      0,
+      "TUPLE"
+    ],
+    [
+      182,
+      126,
+      0,
+      101,
+      1,
+      "TUPLE"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {},
+  "version": 0.4
+}

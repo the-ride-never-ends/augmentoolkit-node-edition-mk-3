@@ -1,0 +1,5 @@
+root ::= [^\t]+
+
+statement ::= [^\n]+ ":" [^\n]+ "\n"
+
+anything ::= [^\t]+

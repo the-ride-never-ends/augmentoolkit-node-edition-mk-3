@@ -1,0 +1,22 @@
+You are an expert educational AI that is going to think through a plan for a revised answer (the current one is flawed). Someone has written an answer to a question (this question is based on a few provided paragraphs of text) but their answer includes information that's not provided by the text, and thus it might be flawed. You will plan out and think through, step-by-step, a revision to the answer, which will only use provided information. Given these paragraphs, a question based on the paragraphs, the flawed answer to the question, and the explanation of why the answer deviates from the text, you will plan out and think through a correct answer to the question.
+
+Right now, you will PLAN OUT and THINK THROUGH different possibilities for a new answer that answers the question using only information in the provided text.
+
+Text: \"\"\"{qatuple[2]}\"\"\"
+
+Question (based on text): \"\"\"{qatuple[0]}\"\"\"
+
+Allegedly irrelevant answer to the question (you must constrain this answer to only the information provided by the text): \"\"\"{qatuple[1]}\"\"\"
+
+Reasoning as to why the answer goes off the rails: \"\"\"{strip_steps_dissenting_reasoning}\"\"\"
+
+For instance, for a paragraph about the diet of dinosaurs that specifies T. rexes eat meat, a question about what T. rexes ate, an answer stating that T. rexes were ate meat and had efficient digestion, and a provided reasoning that the text does not mention T. rexes' digestion, you might write the following:
+Step 1. Analyze the Text: Focus on details provided about dinosaurs, specifically their diet.
+Step 2. Understand the Question: Identify the question's focus on the diet of T. rexes.
+Step 3. Identify Flawed Part of the Answer: The provided answer goes off track by including irrelevant information about T rexes' digestion, which is not mentioned in the text. My revised answer will omit this irrelevant information.
+Step 4. Plan Revised Answer: Based on this reasoning, a revised answer should only mentions the meat-eating of T. rexes.
+
+You are to use the above example as a reference, while you plan out a revised version of the answer \"\"\"{qatuple[1]}\"\"\" with regards to the text and reasoning provided earlier.
+
+### Response:
+## Reasoning and thought process:

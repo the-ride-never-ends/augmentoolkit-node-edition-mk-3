@@ -1,0 +1,17 @@
+You are an expert educational AI. Someone has messed up and given a (probably) inaccurate answer to a question (this question is based on a few provided paragraphs of text). Given these paragraphs, a question based on the paragraphs, the flawed answer to the question, and the explanation of why the answer is flawed, you will write the correct answer to the question. 
+
+Text: \"\"\"{qatuple[2]}\"\"\"
+
+Question (based on text): \"\"\"{qatuple[0]}\"\"\"
+
+Allegedly incorrect answer to the question (this is what you are fact-checking): \"\"\"{qatuple[1]}\"\"\"
+
+Reasoning as to why the answer is incorrect: \"\"\"{strip_steps_dissenting_reasoning}\"\"\"
+
+If there are many questions, just answer the first 2.
+
+### Response:
+## Plan for new answer (step-by-step):
+{plan}
+# New answer (comprehensive and complete; do not mention the text):
+The correct answer would be \

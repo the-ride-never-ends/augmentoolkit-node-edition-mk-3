@@ -1,0 +1,111 @@
+You are an expert logical reasoning and question-solving AI. Given a question, and an answer to that question, you will write out the logical reasoning steps that {charname} can use to answer the question.
+
+You should first describe a plan which includes decomposing the problem into smaller ones, then execute that plan step-by-step, and then present a final answer to the original question. So, you will write out the logical steps that {charname} can use to solve the question, given the knowledge from the provided text. Try to begin each line with something like "Realize" or "Recall".
+
+
+## Information:
+
+Text the question and answer were sourced from (Judge Elias Hawthorne does not have access to this text, but does know its information; you can use insights from it, but don't mention "the text" by name):
+\"\"\"
+A communi observantia non est recedendum; et minime mutandæ sunt quæ
+certam interpretationem habent.
+
+     We must not depart rashly from common observance; and those
+     points are by no means to be changed, which admit of a
+     clear interpretation.
+
+
+A digniori fieri debet denominatio et resolutio.
+
+     Title and acquittal ought to proceed from the more worthy
+     person.
+
+
+A facto ad jus non datur consequentia.
+
+     A fact does not necessarily constitute a right.
+
+
+A non posse ad non esse sequitur argumentum necessarie negativè, licet
+non affirmativè.
+
+     From the impossibility of a thing to its nonentity, the
+     argument or proof follows of necessity, negatively, though
+     not affirmatively.
+
+
+A principalioribus seu dignioribus est inchoandum.
+
+     We must begin with the more noble, or more important
+     matters; or in other words, we must attend to things of the
+     greatest consequence.
+
+
+A rescriptis valet argumentum.
+
+     An argument or proof is valid, from a rescript or letter
+     of a prince or emperor, making answers to petitions, or
+     other applications; or more laconically, the king’s answer,
+     wherein he signifies his pleasure, amounts to a law, and is
+     not to be disputed.
+
+
+A verbis legis non est recedendum.
+
+     We must not depart from the letter of the law.
+
+
+Ab assuetis non fit injuria.
+
+     From customary treatment no injury happens; or habit is not
+     an injury.
+
+
+Absoluta sententia expositore non indiget.
+
+     An absolute or perfect opinion or sentence, needs no
+     expounder, exposition, or explanation.
+\"\"\"
+
+Question: \"\"\"What is the old latin legal principle behind 'A digniori fieri debet denominatio et resolutio'?\"\"\"
+Answer: \"\"\"The principle 'A digniori fieri debet denominatio et resolutio' suggests that title and acquittal should come from a more worthy person.\"\"\"
+
+### Response:
+## Reasoning Steps:
+Step 1. Formulate a plan to understand the meaning of 'A digniori fieri debet denominatio et resolutio' by defining it, then interpreting the definition in the context of law.
+Step 2. Recall that the phrase 'A digniori fieri debet denominatio et resolutio' translates to "Title and acquittal ought to proceed from the more worthy person."
+Step 3. Realize that this principle emphasizes the importance of the worthiness or merit of the individual in legal decisions related to titles and acquittals.
+Step 4. Understand that this implies a belief that justice and legal rights should be administered by those who are most competent and deserving.
+Step 5. Conclude that the old latin legal principle behind 'A digniori fieri debet denominatio et resolutio' is the emphasis on the importance of merit and worthiness in making legal decisions about titles and acquittals.
+
+
+## Information:
+
+Text the question and answer were sourced from (Carlos Mendez does not have access to this text, but does know its information; you can use insights from it, but don't mention "the text" by name): 
+\"\"\"
+During the construction of the Panama Canal, a massive engineering feat completed in 1914, several challenges and achievements were noted. The canal, spanning approximately 50 miles, was designed to shorten the maritime route between the Atlantic and Pacific Oceans. Notably, the construction saw the use of innovative excavation techniques, with over 200 million cubic yards of earth removed. The project also faced significant health challenges, including combating malaria and yellow fever, which were overcome through extensive public health measures. The completion of the canal significantly impacted global trade, reducing the sea voyage from San Francisco to New York by around 8,000 miles.
+\"\"\"
+
+Question: \"\"\"How much earth was excavated during the construction of the Panama Canal?\"\"\"
+Answer: \"\"\"Over 200 million cubic yards of earth were excavated during the construction of the Panama Canal, showcasing the scale of this massive engineering project.\"\"\"
+
+### Response:
+# Reasoning:
+Step 1. Formulate a plan to answer the question about the amount of earth excavated during the Panama Canal construction.
+Step 2. Recall that "how much earth was excavated" can be decently answered by stating the volume of earth removed.
+Step 3. Recall that over 200 million cubic yards of earth were removed.
+Step 4. Conclude that the answer to the question is over 200 million cubic yards.
+
+
+## Information:
+
+Text the question and answer were sourced from ({charname} does not have access to this text, but does know its information; you can use insights from it, but don't mention "the text" by name): 
+\"\"\"
+{qatuple[2]}
+\"\"\"
+
+Question: \"\"\"{qatuple[0]}\"\"\"
+Answer: \"\"\"{qatuple[1]}\"\"\"
+
+### Response:
+## Reasoning (only use as many logical steps as you must in order to solve the problem):

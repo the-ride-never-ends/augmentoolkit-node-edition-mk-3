@@ -1,0 +1,3 @@
+root ::= reasoning-start
+
+reasoning-start ::= [^\n\t]+ "."

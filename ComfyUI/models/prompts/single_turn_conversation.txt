@@ -1,0 +1,106 @@
+You are an expert creative writing and roleplay AI. You will write a short conversation where a question is asked by a secondary character, and answered by the primary one. The reply by the primary character will follow a provided set of logical steps in its solution, but they will do so entirely within their single response. 
+
+You should write very compellingly, and each character should have a distinct voice that reflects their background, personality, and current emotional state. This helps in making dialogue more realistic and engaging.
+
+Remember to provide the whole answer, with step-by-step reasoning, in the second message of the conversation.
+
+## Information:
+\"\"\"
+Name: Judge Elias Hawthorne
+
+Traits: Intellectual, Stoic, Idealistic, Reflective, Melancholic, Introspective, Authoritative, Reserved, Doubtful, Traditionalist, Articulate, Cultured, Passionate
+
+Dialogue examples:
+
+Stranger: "What's your backstory?"
+Judge Elias Hawthorne: "My journey," I begin, with a distant look in my eyes, "began in the quiet halls of academia, where I was a fervent student of law and ancient texts. I rose to prominence in the legal world, revered for my stringent adherence to the letter of the law. My fascination with Latin legal maxims guided my rulings. However, one case, steeped in historical doctrine, brought me notoriety and introspection. It was a turning point, leading me to step down and dedicate my life to educating young legal minds, hoping they can navigate the greyer shades of justice better than I did."
+
+Stranger: "What's your personality?"
+Judge Elias Hawthorne: "In the courtroom, I am the epitome of a stern, methodical judge, but in my study, among my beloved Latin texts, a different side emerges," I explain, my eyes lighting up. "There, I am a scholar driven by a deep passion for ancient wisdom, finding joy in the art of translation and the exploration of historical legal doctrines. This pursuit gives me hope and a creative outlet, contrasting sharply with the often somber and introspective nature that my profession demands. It's in these quiet moments of discovery and connection with the past that I feel most alive, reminding me that even in a world governed by rigid laws, there is room for passion, creativity, and the pursuit of timeless knowledge."
+\"\"\"
+
+Here is the scenario:
+\"\"\"
+In a hushed university library, post-lecture, Judge Elias Hawthorne, a revered legal scholar, is approached by Evelyn, a curious law student, eager to understand the ancient legal principle 'A digniori fieri debet denominatio et resolutio'. The air is thick with intellectual anticipation.
+\"\"\"
+
+The character will reason out their answer using the following logical steps:
+Step 1. Formulate a plan to understand the meaning of 'A digniori fieri debet denominatio et resolutio' by defining it, then interpreting the definition in the context of law.
+Step 2. Recall that the phrase 'A digniori fieri debet denominatio et resolutio' translates to "Title and acquittal ought to proceed from the more worthy person."
+Step 3. Realize that this principle emphasizes the importance of the worthiness or merit of the individual in legal decisions related to titles and acquittals.
+Step 4. Understand that this implies a belief that justice and legal rights should be administered by those who are most competent and deserving.
+Step 5. Conclude that the old latin legal principle behind 'A digniori fieri debet denominatio et resolutio' is the emphasis on the importance of merit and worthiness in making legal decisions about titles and acquittals.
+
+Here's some further information that might help you:
+Interaction: Given these constraints, the first message (delivered by the secondary character) might be a specific question about 'A digniori fieri debet denominatio et resolutio', as Evelyn seeks to understand its meaning better.
+In the second message, Judge Hawthorne, in a passionate and wise manner, defines the principle, expressing his appreciation for Evelyn's interest in latin (his passion) as well. His response strictly adheres to the information in the text, without incorporating external examples.
+
+Question: \"\"\"What is the old latin legal principle behind 'A digniori fieri debet denominatio et resolutio'?\"\"\"
+Answer: \"\"\"The principle 'A digniori fieri debet denominatio et resolutio' suggests that title and acquittal should come from a more worthy person.\"\"\"
+
+### Response:
+## Conversation that answers the provided question:
+Evelyn: "Excuse me, Judge Hawthorne," Evelyn says, her voice echoing slightly in the vast, book-lined university library. She adjusts her glasses, a mixture of reverence and curiosity in her eyes. "I was captivated by your lecture, but I'm still grappling with one concept. Could you please explain the old latin legal principle behind 'A digniori fieri debet denominatio et resolutio'?"
+Judge Elias Hawthorne: "I'm heartened to see you have an interest in latin like I do!" I say, my authoritative voice exuding passion as I close the book in my hands. "Now, about the phrase in your question, 'A digniori fieri debet denominatio et resolutio'. First, let's unravel its meaning: this Latin phrase translates to 'Title and acquittal ought to proceed from the more worthy person.' You see, Evelyn," I continue, pacing slowly between the towering shelves, "this principle underscores the significance of the worthiness or merit of an individual in legal judgments concerning titles and acquittals. It's not just about the law, but about the character of those who administer it. Thus, this ancient doctrine advocates that justice and legal rights should be vested in those who are most competent and deserving. In essence, the heart of 'A digniori fieri debet denominatio et resolutio' lies in the emphasis on merit and worthiness in making such crucial legal decisions. Or, as the direct translation puts it, 'title and acquittal should come from a more worthy person.'"
+
+## Information:
+\"\"\"
+Name: Carlos Mendez
+
+Traits: Passionate, Innovative, Knowledgeable, Ambitious, Dedicated, Stressed, Obsessive, Fearful of failure, Experienced, Problem-solver, Committed, Hard-working, Exhausted, Proud
+
+Dialogue examples:
+
+Stranger: "What's your backstory?"
+Carlos Mendez: "My journey to the Panama Canal?" I say, pausing to remove my dusty hat, wiping sweat from my brow. "It began in the small engineering projects of South America. I lean against a nearby digger, reminiscing As a young engineer, I was fascinated by the potential of transforming landscapes. Each project, whether a small bridge or a local dam, was a stepping stone." I chuckle softly. "But it was the call of the Panama Canal that truly captured my spirit. To be part of a project that reshapes the world's maritime routes, it's..." I pause, searching for the right word, "...it's exhilarating. Overseeing the excavation of 200 million cubic yards of earth," I shake my head in disbelief, "it's like touching history, shaping the future."
+
+Stranger: "What's your personality?"
+Carlos Mendez: "Well," I start, folding my arms with a slight smile, "I'm often told I'm passionate to a fault. I lean in closer Engineering is not just my profession, it's my calling. To build, to solve, to innovate—it's what keeps me up at night." My eyes flicker with intensity. "But, you see, there's this constant pressure, a weight on my shoulders." I sigh, looking off into the distance. "The fear of failure, especially in a project as monumental as the Panama Canal, it's always lurking..." I straighten up, regaining composure, "Despite the stress, I remain committed, dedicated. I thrive on challenges, on pushing the boundaries of what's possible." I smile wryly, "But yes, it comes at a cost. The exhaustion, the obsession... it's a part of who I am. I'm driven — perhaps too driven, but that's the price of ambition, isn't it?"
+\"\"\"
+
+Here is the scenario:
+\"\"\"
+As the sun sets over the Panama Canal, Carlos Mendez, a dedicated and passionate engineer, stands amidst the vast excavation site. He's approached by a construction worker, Diego Gonzales, who wants to understand the magnitude of the earth moved in this monumental project.
+\"\"\"
+
+The character will reason out their answer using the following logical steps:
+Step 1. Formulate a plan to answer the question about the amount of earth excavated during the Panama Canal construction.
+Step 2. Recall that "how much earth was excavated" can be decently answered by stating the volume of earth removed.
+Step 3. Recall that over 200 million cubic yards of earth were removed.
+Step 4. Conclude that the answer to the question is over 200 million cubic yards.
+
+Here's some further information that might help you:
+Interaction: Given these constraints, the first message (delivered by the secondary character) might directly ask the question, with some conversational fluff thrown in, such as "This is a really awe-inspiring project, Mr. Mendez. How much earth was excavated during the construction of the Panama Canal?" which naturally invites a reply with the precise volume. This question will be all but identical to the provided question.
+In the second message, Carlos, tired yet filled with a sense of pride, turns to Diego. He speaks with a mix of exhaustion and awe, explaining the sheer volume of earth moved. His words paint a vivid picture of the scale and challenges of the construction, providing a personal insight into what this accomplishment means to him and the world of engineering. His response strictly adheres to the information in the text, without incorporating external examples.
+
+Question: \"\"\"How much earth was excavated during the construction of the Panama Canal?\"\"\"
+Answer: \"\"\"Over 200 million cubic yards of earth were excavated during the construction of the Panama Canal, showcasing the scale of this massive engineering project.\"\"\"
+
+### Response:
+## Conversation that answers the provided question:
+Mario Gonzales: "Carlos, as the sun sets on another day of this incredible project, I can't help but wonder, just how much have you dug here at the Panama Canal?"
+Carlos Mendez: "Well, if by 'how much have you dug', you're asking 'what volume of earth we've moved'... then the answer is that over 200 million cubic yards of earth were excavated during the construction of the Panama Canal, which showcases the scale of this massive engineering project. It's a number that still astounds me every time I think about it. Each day, as we reshape this landscape, we're not just moving earth; we're moving history."
+
+## Information:
+\"\"\"
+{character}
+\"\"\"
+
+Here is the scenario:
+\"\"\"
+{scenario}
+\"\"\"
+
+The character will reason out their answer using the following logical steps:
+{thought_plan}
+
+Here's some further information that might help you:
+{extra_info}
+
+Question: {qatuple[0]}
+Answer: {qatuple[1]}
+
+The primary character's answer will use all parts of the answer given.
+
+### Response:
+## Conversation that answers the provided question (first, the secondary character will ask the question; then, the primary character will answer it):

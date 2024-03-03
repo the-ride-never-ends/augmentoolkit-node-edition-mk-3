@@ -1,0 +1,13 @@
+root ::= (question-one answer "\n") (question-two answer "\n") (question-three answer "\n") (question-four answer)
+
+answer ::= "Answer: " [^\n]+ "\n"
+
+number ::= [1-9] [0-9]? [0-9]?
+
+question-one ::= "1.) " [^\n]+ [?.!] "\n\n"
+
+question-two ::= "2.) " [^\n]+ [?.!] "\n\n"
+
+question-three ::= "3.) " [^\n]+ [?.!] "\n\n"
+
+question-four ::= "4.) " [^\n]+ [?.!] "\n\n"

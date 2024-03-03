@@ -1,0 +1,12 @@
+root ::= name "\n" "Traits: " traits "\n\nDialogue Examples:" dialogue-examples
+
+name ::= [^\n ]+
+
+traits ::=  trait trait trait trait trait trait trait trait trait trait trait trait trait? trait? trait? trait? trait? trait? trait? trait? # 14 comma-separated traits
+
+trait ::= [A-Z][a-z ']+ ", "
+
+dialogue-examples ::= history personality
+
+history ::= "\nStranger: \"What's your backstory?\"\n" name ": \"" [^\n]+
+personality ::= "\nStranger: \"What's your personality?\"\n" name ": \"" [^\n]+

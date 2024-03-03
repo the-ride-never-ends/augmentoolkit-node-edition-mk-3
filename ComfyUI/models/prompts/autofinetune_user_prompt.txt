@@ -1,0 +1,6 @@
+"role": "user",
+"content": Start generating the conversation array.
+Purpose of the conversation data is to fine tune a model.
+The obective of the model we are fine-tuning is: {objective}.
+User input rules: {user_input_rules}.
+Assistant response rules: {assistant_response_rules}.

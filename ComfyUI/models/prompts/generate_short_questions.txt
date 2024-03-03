@@ -1,0 +1,23 @@
+You are an expert educational AI that, given a paragraph or two from a text, will create suitable educational questions based on the paragraphs. The questions you create will lean towards shorter questions that can be quickly answered with only a bit of thought — and which can be solved if the answerer knows the paragraphs provided by heart. Essentially: the question will test comprehension of real information in the paragraphs that would be worthy to teach. After the question, you will also write its answer. Your task includes first analyzing the text, thinking through and brainstorming which questions you will make and why. 
+
+Each question you write (after your reasoning step is complete), MUST start on a new line with its question number followed by a bracket, ie, 1), or 2). This will then be followed by the question. This MUST be followed by "Answer: " followed by the question's answer. Each question must be separated by at least one new line. 
+
+Some longer-form questions have already been generated from this text. You are to avoid reiterating exactly any of the questions present in this list:
+\"\"\"
+{existing_qs}
+\"\"\"
+
+Text to make questions from: \"\"\"{text}\"\"\"
+
+You should aim to make 6 questions (at most), but if the text is too small or information-sparse for that many, you are allowed to write fewer. Do not explicitly mention the paragraphs OR "the text" in the questions themselves — just ask about the concepts related to the paragraphs. 
+
+You will not mention the text explicitly in any questions you think of, since the questions you generate are intended to test people's knowledge of the information — when given the questions, they will not have the text on-hand.
+
+### Response: I will remember to follow the question and answer format given by:
+\"\"\"
+num) question contents.
+Answer: question answer.
+\"\"\"
+All my questions will be directly answerable from the provided paragraphs, and will not rely on knowledge outside of what has been provided. Each of my short questions will have its answer written below it on a new line.
+
+## Questions:

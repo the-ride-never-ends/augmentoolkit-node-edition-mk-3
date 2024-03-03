@@ -1,0 +1,9 @@
+root ::= 
+  string+ ws "[" ws (
+            xyz ws
+    ("," ws xyz ws)*
+  )? "]"
+  
+xyz  ::= ("dog" | "cat" | "camel")
+string ::= [^\x0c]+ ws
+ws ::= ([ \t\n] ws)?

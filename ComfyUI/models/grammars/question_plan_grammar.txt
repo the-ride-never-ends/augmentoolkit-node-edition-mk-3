@@ -1,0 +1,11 @@
+root ::= identify-step brainstorm-step relationships-step if-then-step make-suitable-step
+
+identify-step ::= "Step " [0-9]?[0-9] ". " "Identify Key Topics:" [^\n]+ "\n"
+
+brainstorm-step ::= "Step " [0-9]?[0-9] ". " "Brainstorm and Develop Questions Testing Recall:" [^\n]+ "\n"
+
+relationships-step ::= "Step " [0-9]?[0-9] ". " "Devise Questions" [^\n]+ "\n"
+
+if-then-step ::= "Step " [0-9]?[0-9] ". " "Create Questions Investigating" [^\n]+ "\n"
+
+make-suitable-step ::= "Step " [0-9]?[0-9] ". " "Make a Question that Naturally Complements the Text's Focus:" [^\n]+ "\n"

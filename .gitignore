@@ -1,0 +1,20 @@
+ComfyUI/__pycache__/
+*.py[cod]
+ComfyUI/output/*
+ComfyUI/input/*
+!/input/_put_input_text_here.txt
+!/input/A Short History of the World, by HG Wells, Abridged to Chapter 3.txt
+ComfyUI/models/llm/*
+!/models/llm/put_llms_here.txt
+debug_logs/*
+ComfyUI/script_examples/*
+python_embeded/Lib/*
+ComfyUI/extra_model_paths.yaml
+/.vs
+.idea/
+myenv/
+update/
+ComfyUI/web/extensions/*
+!/web/extensions/logging.js.example
+!/web/extensions/core/
+ComfyUI/tests-ui/data/object_info.json

@@ -27,9 +27,10 @@ import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 
 script_dir = os.path.dirname(os.path.realpath(__file__))
-custom_nodes_path = os.path.join(script_dir, "ComfyUI", "custom_nodes")
+custom_nodes_path = os.path.join(script_dir, "..", "custom_nodes")
 sys.path.insert(0, custom_nodes_path)
 
+import accelerate
 from accelerate.utils import release_memory
 from collections import Counter
 from collections.abc import Callable, Awaitable
@@ -58,14 +59,16 @@ import custom_nodes.augmentoolkit_api_functions
 from custom_nodes.grammars import Grammars
 
 import folder_paths
+from program_configs import get_config
 
 # Try to import all packages for the Aphrodite and API nodes.
-
 if os.name == "nt":
-    logger.info("Note: aphrodite-engine currently does not support Windows.\n Use Linux or WSL to run augmentoolkit with aphrodite-engine.\nOnly Llama CPP or API modes will run.")
+    print("Note: Aphrodite-engine currently does not support Windows.\n Use Linux or WSL to run augmentoolkit with aphrodite-engine.\nOnly Llama CPP or API modes will run.")
     APHRODITE_NOT_INSTALLED = True
-elif os.name == "posix":
+
+if os.name == "posix":
     try:
+        print("Attempting to import Aphrodite-engine...")
         from aphrodite import (
             EngineArgs,
             AphroditeEngine,
@@ -74,16 +77,18 @@ elif os.name == "posix":
             AsyncEngineArgs,
         )
     except:
-        logger.info("Aphrodite not installed. Only Llama CPP or API modes will run.")
+        print("Aphrodite-engine not installed. Only Llama CPP or API modes will run.")
         APHRODITE_NOT_INSTALLED = True
 
 try:
+    print("Attempting to import OpenAI api...")
     import openai
 except:
-    logger.info("Note: OpenAI client not installed.")
+    print("Note: OpenAI client not installed.")
     OPENAI_NOT_INSTALLED = True
 
 try:
+    print("Attempting to import TogetherAI api...")
     import together
 except:
     logger.info("Note: Together.ai client not installed.")
@@ -104,174 +109,10 @@ except:
 #TODO Make these functions async so that this can run aphrodite.
 #TODO External API nodes. Maybe NodeGPT's can be repurposed?
 #TODO Linux in general. MacOS eventually.
-#TODO 
 
 ################################################################
 #### DIRECTORIES, EXTENSIONS, AND GLOBAL VARIABLE FUNCTIONS ####
 ################################################################
-# Note: The active version of these folder are in the folder_paths.py file.
-# These are kept here for storage/overwrite prevention reasons.
-"""
-supported_llm_extensions = set(['.ckpt', '.pt', '.bin', '.pth', '.safetensors', '.gguf', ''])
-supported_llm_grammar_extensions = set(['.json','.jsonl', '.txt',])
-supported_llm_tokenizer_extensions = set(['.json','.jsonl', '.txt',])
-supported_llm_prompt_extensions = set(['.json','.jsonl', '.txt',])
-
-llm_directory = os.path.join(os.path.dirname(os.path.realpath(__file__)), "llm")
-grammars_directory = os.path.join(os.path.dirname(os.path.realpath(__file__)), "grammars")
-tokenizers_directory = os.path.join(os.path.dirname(os.path.realpath(__file__)), "tokenizers")
-prompts_directory = os.path.join(os.path.dirname(os.path.realpath(__file__)), "prompts")
-
-def get_llm_directory():
-    global llm_directory
-    return llm_directory
-
-def get_grammars_directory():
-    global grammars_directory
-    return grammars_directory
-
-def get_tokenizers_directory():
-    global tokenizers_directory
-    return tokenizers_directory
-
-def get_prompts_directory():
-    global prompts_directory
-    return prompts_directory
-
-def set_raw_text_name(name):
-    global raw_text_name
-    raw_text_name = name
-
-def get_raw_text_name():
-    global raw_text_name
-    return raw_text_name
-
-def set_loaded_llm_name(name):
-    global loaded_llm_name
-    loaded_llm_name = name
-
-def get_loaded_llm_name():
-    global loaded_llm_name
-    return loaded_llm_name
-
-folder_names_and_paths["tokenizers"] = ([os.path.join(models_dir, "tokenizers")], supported_llm_tokenizer_extensions)
-folder_names_and_paths["grammars"] = ([os.path.join(models_dir, "grammars")], supported_llm_grammar_extensions)
-folder_names_and_paths["llm"] = ([os.path.join(models_dir, "llm")], supported_llm_extensions)
-folder_names_and_paths["prompts"] = ([os.path.join(models_dir, "prompts")], supported_llm_prompt_extensions)
-
-input_directory = os.path.join(os.path.dirname(os.path.realpath(__file__)), "input")
-output_directory = os.path.join(os.path.dirname(os.path.realpath(__file__)), "output")
-
-"""
-
-# TODO: Move these into nodes so that they can be changed by the user.
-
-DEBUG_MODE = True
-
-# Path globals. Currently set to Windows backslashes
-
-INPUT = os.path.join(".", "ComfyUI", "input")
-
-OUTPUT = os.path.join(".", "ComfyUI", "output")
-
-PROMPTS = os.path.join(".", "ComfyUI", "models", "prompts")
-
-DEFAULT_PROMPTS = os.path.join(".", "ComfyUI", "models", "prompts")
-
-# System Globals
-API_KEY = "" # Currently set to nothing.
-
-ASSISTANT_MODE = True  # change to true if you want all conversations to be with an "AI language model" and not characters. 
-                       # Useful for more professional use cases.
-
-BASE_URL: "https://api.mistral.ai/v1/"
-
-COMPLETION_MODE = False
-
-CONCURRENCY_LIMIT = 90
-
-DOUBLE_CHECK_COUNTER = 3  # Set to 1 to check outputs only once; set to 2 to check twice; set to 3 to check thrice, etc. 
-                          # Set to 0 to break everything in vet_question_loop() and elsewhere. 
-                          # Set to -1 and cause the universe to implode?
-
-GRAPH = False
-
-N_CHARACTERS_SAME = 3
-
-REARRANGEMENTS_TO_TAKE = 3  # How many of the possible permutations of tuples in a group to take and make multiturn convs out of. 
-                            # Adjust higher to get more data out of less text, but it might be a bit repetitive. 
-                            # NOTE your eval loss will be basically worthless if you aren't careful with how you shuffle your dataset when you're about to train.
-
-TEXT_MANUALLY_CLEANED = False  # If you've manually cut out all the parts of the text not worthy for questions, you can skip the first LLM step. 
-                               # NOTE I might actually recommend doing this if your source text is small, given how permissive the filtering prompt is; 
-                               # it really only disallows metadata.
-
-USE_FILENAMES = False
-
-USE_SUBSET = True
-
-"""
-PATH:
-  INPUT: "./input"
-  OUTPUT: "./output"
-  DEFAULT_PROMPTS: "./models/prompts" # the baseline prompt folder that Augmentoolkit falls back to if it can't find a step in the PROMPTS path
-  PROMPTS: "./models/prompts" # Where Augmentoolkit first looks for prompts
-API:
-  API_KEY: ""
-  BASE_URL: "https://api.mistral.ai/v1/"
-  LOGICAL_MODEL: "mistral-large" #Not used in Comfy, as you can select the model in the UI directly.
-  LARGE_LOGICAL_MODEL: "mistral-large" #Not used in Comfy, as you can select the model in the UI directly.
-SYSTEM:
-  USE_FILENAMES: False
-  ASSISTANT_MODE: False 
-  DEBUG_MODE: True
-  DOUBLE_CHECK_COUNTER: 3
-  USE_SUBSET: True
-  REARRANGEMENTS_TO_TAKE: 3
-  CONCURRENCY_LIMIT: 90
-  COMPLETION_MODE: False
-  MODE: "api" # can be one of "api"|"aphrodite"|"llamacpp" Currently redundant due to mode being chosen implicitly by which loader node is used.
-  GRAPH: False
-  
-ASSISTANT_MODE = obj_conf['']['']
-DEBUG_MODE = obj_conf['']['']
-DOUBLE_CHECK_COUNTER = obj_conf['']['']
-REARRANGEMENTS_TO_TAKE = obj_conf['']['']
-TEXT_MANUALLY_CLEANED = obj_conf['']['']
-"""
-
-print("Loading global variable presets from 'config.yaml'...")
-def load_yaml_as_globals(file_path: str):
-    global_vars = globals()
-
-    with open(file_path, 'r') as file:
-        obj_conf = yaml.safe_load(file)
-
-        for key in obj_conf.items():
-            for sub_key, value in key:
-                try: # Change forward slashes to backslashes based on OS type.
-                    if key == "INPUT" or "OUTPUT" or "DEFAULT_PROMPTS" or "PROMPTS":
-                        if os.name == "nt": # Windows
-                            value = key.replace("/", "\\")
-                            logger.info(f"Changing forward-slashes to back-slashes for global variable '{key}'...")
-                        elif os.name == "posix": # Linux
-                            pass
-                    global_vars[sub_key] = value # Turn the configs into global variables.
-                    if DEBUG_MODE:
-                        logger.info(f"Global variable '{key}' set to '{value}'")
-                except Exception as e:
-                    logger.warning(f"WARNING: Could not find global variable '{key}' in 'config.yaml'. Defaulting to hardcoded global variable preset.")
-
-config = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "config.yaml")
-
-try:
-    load_yaml_as_globals(f'{config}')
-except Exception as e:
-    logger.exception(f"WARNING: Could not load 'config.yaml' file due to: {e}\n Defaulting to hardcoded global variable presets.\n")
-
-if DOUBLE_CHECK_COUNTER <= 0:
-    logger.warning("WARNING: current value for 'DOUBLE_CHECK_COUNTER' global variable will crash the program.\nDefaulting to DOUBLE_CHECK_COUNTER = 3 ")
-    DOUBLE_CHECK_COUNTER = 3
 
 # These do nothing at the moment. May change later - KR
 SOURCE_TEXTS = [
@@ -279,7 +120,7 @@ SOURCE_TEXTS = [
     "Principles of Chemistry, by Demitry Mendeleev, published 1897.txt",
 ]
 
-NAMES = [  # Replaces "Albert" in scenarios. Needs to be western male names to avoid pronoun and setting inconsistencies).
+NAMES = [ # Replaces "Albert" in scenarios. Needs to be western male names to avoid pronoun and setting inconsistencies).
     "William",
     "James",
     "John",
@@ -302,46 +143,7 @@ NAMES = [  # Replaces "Albert" in scenarios. Needs to be western male names to a
     "Samuel",
 ]
 
-# Create jsons of the prompt txt files, if they don't exist.
-print("Creating JSON prompt files from current TXT prompt files...")
-for filename in os.listdir(PROMPTS):
-    # 
-    directory_path = PROMPTS
 
-    # JSON structure to prepend
-    json_structure = [
-        {"role": "system", "content": ""},
-        {"role": "user", "content": ""},
-        {"role": "assistant", "content": ""},
-    ]
-
-    if filename.endswith(".txt"):
-        # Construct the path to the current file
-        file_path = os.path.join(directory_path, filename)
-        # Construct the new filename with .json extension
-        new_filename = os.path.splitext(filename)[0] + '.json'
-        new_file_path = os.path.join(directory_path, new_filename)
-
-        # Skip the JSON file if it already exists
-        if not os.path.exists(new_file_path):
-
-            # Read the contents of the original text file
-            with open(file_path, 'r', encoding='utf-8') as file:
-                original_content = file.read()
-    
-                # Instead of escaping, we directly assign the content
-                json_structure.append({"original_content": original_content})
-
-                # Write the JSON structure to the new file
-                with open(new_file_path, 'w', encoding='utf-8') as new_file:
-                    json.dump(json_structure, new_file, indent=2, ensure_ascii=False)
-
-            # Reset json_structure for the next file by removing the last element (original content)
-            json_structure.pop()
-        else:
-            print(f"'{new_filename}' already exists. Skipping...")
-
-print("JSON prompt files created. Note that the TXT prompts still exist.")
 
 
 #########################################
@@ -389,7 +191,7 @@ for file_name in folder_paths.get_filename_list("grammars"):
 #########################################
 
 # Set up rate-limit-conscious functions
-SEMAPHORE = asyncio.Semaphore(CONCURRENCY_LIMIT)
+SEMAPHORE = asyncio.Semaphore(get_config("CONCURRENCY_LIMIT"))
 
 # Function to prevent rate-limits overruns.
 async def run_task_with_limit(task: Callable):
@@ -419,12 +221,12 @@ async def run_tasks(limited_tasks_qgen):
 # Useful for recording LLM presets.
 def log_arguments(func: Callable):
     def wrapper(*args, **kwargs):
-        if DEBUG_MODE:
+        if get_config("DEBUG_MODE"):
             # Get the names and input values of the function's arguments.
             func_args_names = inspect.signature(func).parameters.keys()
             args_names = list(func_args_names)[:len(args)]
             args_dict = dict(zip(args_names, args))
-            
+
             # Merge args_dict with kwargs to have a complete map of argument names to their values
             all_args = {**args_dict, **kwargs}
             
@@ -436,7 +238,7 @@ def log_arguments(func: Callable):
 # Conditional decorator function for log arguments.
 # Allows it be controlled via DEBUG_MODE global variable.
 def conditional_log_arguments(func: Callable):
-    if DEBUG_MODE:
+    if get_config("DEBUG_MODE"):
         return log_arguments(func)
     else:
         return func
@@ -531,7 +333,7 @@ def extract_steps(text: str, steps=[2, 4, 5]):
 
 # IMPORTANT FUNCTION: Do not change lightly as it's used by a fuck-ton of different functions.
 # TODO: Test to see if function calls actually work inside this.
-def format_external_text_like_f_string(external_text: str, prompt_content: dict) -> str:
+def format_external_text_like_f_string(external_text: str, prompt_content: str) -> str:
     # Define the regex replacement pattern. This pattern corresponds to the curly brace arguments in traditional f-strings.
     # These placeholders are expected to be in curly braces {} and can include 
     # alphanumeric characters, underscores, numeric indices in square brackets, or function calls.
@@ -717,16 +519,17 @@ def override_prompt_and_grammar(function_name: str, override_prompt=None, overri
 
     return prompt, grammar
 
+
 def random_name():
     return random.choice(NAMES)
 
-# TODO Add the prompt and grammar back in.
+
 def sanity_check(LLM: dict) -> None:
     initialized_model = LLM['llm']
     retries = 0
     while retries <= 4:
         decision_prompt = f"""Hi there, """
-        logger.info("DEBUG\n\n" + decision_prompt) if DEBUG_MODE else None
+        logger.info("DEBUG\n\n" + decision_prompt) if get_config("DEBUG_MODE") else None
         completion = initialized_model(
             decision_prompt,
             max_tokens=100,
@@ -735,7 +538,7 @@ def sanity_check(LLM: dict) -> None:
             grammar="answer_accurate_grammar",
             temperature=0.2,
         )["choices"][0]["text"]
-        logger.info(completion) if DEBUG_MODE else None
+        logger.info(completion) if get_config("DEBUG_MODE") else None
 
         return
 
@@ -1144,7 +947,7 @@ class ReviseQATuples:
                     )["choices"][0]["text"]
 
                 end_time = time.time()
-                if DEBUG_MODE:
+                if get_config("DEBUG_MODE"):
                     logger.info(f"Completion for 'generate_questions_plan' function ***\n{completion}\n*** Completion for 'generate_questions_plan' function")
 
                 logger.info(f"Completion took {(end_time - start_time) / 60} minutes to generate.")
@@ -1159,7 +962,7 @@ class ReviseQATuples:
 
                 # Extract the decision pattern from the LLM's response pattern.
                 decision_pattern = re.compile(r"Final judgment:(.+)", re.IGNORECASE)
-                if DEBUG_MODE:
+                if get_config("DEBUG_MODE"):
                     logger.info(f"Response for 'check_qatuple_context' function ***\n{response}\n*** Response for 'check_qatuple_context' function ***")
 
                 # Extract the determination from the LLM's decision pattern.
@@ -1325,7 +1128,7 @@ class ReviseQATuples:
                     vetted_qa_tuples=vetted_qa_tuples,
                     qa_tuples_dir=qatuples_revised_directory,
                     double_check_counter=DOUBLE_CHECK_COUNTER,
-                    use_filenames=USE_FILENAMES) for idx,para in enumerate(vetted_qa_tuples)
+                    use_filenames=USE_FILENAMES) for idx, para in enumerate(vetted_qa_tuples)
                  ]
 
                 limited_tasks_qgen = [run_task_with_limit(task) for task in tasks]
@@ -1343,7 +1146,7 @@ class ReviseQATuples:
                     vetted_qa_tuples=vetted_qa_tuples,
                     qa_tuples_dir=qatuples_revised_directory,
                     double_check_counter=DOUBLE_CHECK_COUNTER,
-                    use_filenames=USE_FILENAMES) for idx,para in enumerate(vetted_qa_tuples)
+                    use_filenames=USE_FILENAMES) for idx, para in enumerate(vetted_qa_tuples)
                  ]
 
                 limited_tasks_qgen = [run_task_with_limit(task) for task in tasks]
@@ -1447,7 +1250,7 @@ def check_answer(qatuple: Tuple, LLM: dict, permissive_mode=True):  # The fuck i
 
             # Extract the response pattern from the LLM's completion.
             response = completion_pattern.search(completion).group(1).strip()
-            if DEBUG_MODE:
+            if get_config("DEBUG_MODE"):
                 logger.info(f"*** Response for 'check_answer' function ***\n{response}\n *** Completion for 'check_answer' function ***")
 
             # Extract the LLM's determination from the response pattern.
@@ -1489,7 +1292,9 @@ def check_answer_relevancy_with_text(qatuple: Tuple, LLM: dict): #TODO: Document
     retries = 0
     initialized_model = LLM['llm']
     prompt_content = {
-            "qatuple": qatuple,
+        "text": qatuple[2],
+        "question": qatuple[0],
+        "answer": qatuple[1],
     }
 
     # Load the prompt and the grammar.
@@ -1553,7 +1358,8 @@ def check_answer_relevancy_with_text(qatuple: Tuple, LLM: dict): #TODO: Document
 
             # Extract the response pattern from the LLM's completion.
             response = completion_pattern.search(completion).group(1).strip()
-            logger.info(f"Response for 'check_answer_relevancy_with_text' function on retry {retries} ***\n{response}\n *** Completion for 'check_answer_relevancy_with_text' function on retry {retries}")
+            if get_config("DEBUG_MODE"):
+                logger.info(f"Response for 'check_answer_relevancy_with_text' function on retry {retries} ***\n{response}\n *** Completion for 'check_answer_relevancy_with_text' function on retry {retries}")
 
             # Extract the LLM's determination from the response pattern.
             determination = judgement_pattern.search(response).group(1).strip()
@@ -1581,7 +1387,7 @@ def check_question(qatuple: Tuple, LLM: dict): #TODO: Document this function.
     retries = 0
     initialized_model = LLM['llm']
     prompt_content = {
-            "qatuple": qatuple,
+        "qatuple": qatuple,
     }
 
     # Load the prompt and the grammar.
@@ -1651,7 +1457,8 @@ def check_question(qatuple: Tuple, LLM: dict): #TODO: Document this function.
 
             # Extract the response pattern from the LLM's completion.
             response = response_pattern.search(completion).group(1).strip()
-            logger.info(f"\n*** Response for 'check_question' function ***\n{response}\n*** Response for 'check_question' function ***\n")
+            if get_config("DEBUG_MODE"):
+                logger.info(f"\n*** Response for 'check_question' function ***\n{response}\n*** Response for 'check_question' function ***\n")
 
             # Extract the LLM's determination from the response pattern.
             determination = decision_pattern.search(response).group(1).strip()
@@ -1758,7 +1565,8 @@ def generate_new_question(qatuple: Tuple, LLM: dict):
             re.IGNORECASE | re.DOTALL
         )
         generation = response_pattern.search(completion).group(1)
-        logger.info(f"\nResponse for 'generate_new_question' function ***\n{generation}\n*** Response for 'generate_new_question' function ***")
+        if get_config("DEBUG_MODE"):
+            logger.info(f"\nResponse for 'generate_new_question' function ***\n{generation}\n*** Response for 'generate_new_question' function ***")
 
         print("-------------------")
 
@@ -1773,7 +1581,7 @@ def generate_new_question(qatuple: Tuple, LLM: dict):
             logger.info("Made Qs, yay!")
             made_questions = True
         else:
-            logger.info("retry!")
+            logger.info("No matches found. Retry!")
             retries += 1
 
     for match in matches:
@@ -1791,13 +1599,7 @@ def generate_qa_tuples(LLM: dict, qa_tuple_directory_name: str,
                        question_plan_directory_name: str, 
                        question_plan_generations_directory_name: str,
                        total_retries: int, 
-                       filtered_worthy_for_questions=None,
-                       override_check_answer_presets=None,
-                       override_check_answer_relevancy_with_text_presets=None,
-                       override_check_question_presets=None,
-                       override_generate_new_question_presets=None,
-                       override_generate_questions_plan_presets=None,
-                       override_generate_questions_presets=None):
+                       filtered_worthy_for_questions=None,):
     """
     This function generates QA tuples from input paragraphs.
 
@@ -1836,7 +1638,7 @@ def generate_qa_tuples(LLM: dict, qa_tuple_directory_name: str,
         if LLM['type'] == 'llamacpp':
             # For every paragraph and their index number in the judged paragraphs...
             for idx, para in enumerate(tqdm(filtered_worthy_for_questions)):
-                # for idx, para in enumerate(tqdm(filtered_worthy_for_questions[:10])): # Use this instead if you are just testing all steps of the notebook
+
                 try:
                     existing_files = glob.glob(os.path.join(qa_tuples_dir, f"para_{idx}_*.json"))  # check if questions already exist
 
@@ -1872,7 +1674,6 @@ def generate_qa_tuples(LLM: dict, qa_tuple_directory_name: str,
                             LLM, 
                             total_retries, 
                             run_id=question_group_id,
-                            
                         )
 
                         # Write resulting question json file if the tuple is not None
@@ -1890,7 +1691,7 @@ def generate_qa_tuples(LLM: dict, qa_tuple_directory_name: str,
 
         elif LLM['type'] == 'aphrodite':
             # Create a list of tasks.
-            tasks = [augmentoolkit_async_functions.generate_qatuples_from_para(
+            tasks = [augmentoolkit_async_2_functions.generate_qatuples_from_para(
                 idx,
                 para,
                 engine_wrapper=LLM['llm'],
@@ -2320,6 +2121,7 @@ class GenerateQATuplesSimple: #TODO Write function documentation. This class wil
         question_plan_directory_name = "question_plan_generations"
         question_plan_generations_directory_name = "question_generation_generations"
         
+        
         # Run the generate_qa_tuples function 
         vetted_qa_tuples = generate_qa_tuples(LLM, 
                                               qa_tuple_directory_name, 
@@ -2333,8 +2135,8 @@ class GenerateQATuplesSimple: #TODO Write function documentation. This class wil
 
         return(vetted_qa_tuples,)
 
-
-class GenerateQATuplesAdvanced: #TODO Write function documentation. This class will be a BEAR to create, and will likely need to be split up into separate nodes later on depending on its complexity.
+#TODO Write function documentation. This class will be a BEAR to create, and will likely need to be split up into separate nodes later on depending on its complexity.
+class GenerateQATuplesAdvanced: 
     """
     This node generates QA tuples from input paragraphs using the 'generate_qa_tuples' function.
     This one has options to customize the directory names and override the LLM presets.
@@ -2536,7 +2338,7 @@ def make_regenerate_answer_constrain_to_text_plan(prompt: str, qatuple: Tuple, d
                     temperature=0.2,
                 )["choices"][0]["text"]
 
-            if DEBUG_MODE:
+            if get_config("DEBUG_MODE"):
                 logger.info(f"\n*** make_regenerate_answer_constrain_to_text_plan COMPLETION ***: \n{completion}\n ***make_regenerate_answer_constrain_to_text_plan COMPLETION ***\n")
 
             end_time = time.time()
@@ -2549,7 +2351,7 @@ def make_regenerate_answer_constrain_to_text_plan(prompt: str, qatuple: Tuple, d
             )
 
             correction = completion_pattern.search(completion).group(1)
-            if DEBUG_MODE:
+            if get_config("DEBUG_MODE"):
                 logger.info(f"\n*** make_regenerate_answer_constrain_to_text_plan CORRECTION ***: \n{correction}\n ***make_regenerate_answer_constrain_to_text_plan CORRECTION ***\n")
             logger.info(f"Correction extraction successful.")
 
@@ -2637,12 +2439,12 @@ def multi_turn_conversation(qatuples: list, character: str, scenario: str, scena
         scenario_plan = "N/A"
         charname = "AI Assistant"
         prompt_content = {
+            "character": character,
             "charname": charname,
+            "conv_starter": conv_starter,
             "scenario": scenario,
             "scenario_plan": scenario_plan,
-            "character": character,
-            "conv_starter": conv_starter,
-            "format_qatuples_qatuples": format_qatuples(qatuples),
+            "question_answer_list": format_qatuples(qatuples),
         }
 
         # Load the assistant prompt.
@@ -2678,13 +2480,13 @@ def multi_turn_conversation(qatuples: list, character: str, scenario: str, scena
         # Load the content to put in the regular prompt.
         extra_info = extract_steps(scenario_plan)
         prompt_content = {
+            "character": character,
             "charname": charname,
+            "conv_starter": conv_starter,
+            "extra_info": extra_info,
             "scenario": scenario,
             "scenario_plan": scenario_plan,
-            "character": character,
-            "extra_info": extra_info,
-            "conv_starter": conv_starter,
-            "format_qatuples_qatuples": format_qatuples(qatuples),
+            "question_answer_list": format_qatuples(qatuples),
         }
 
         # Load the regular prompt.
@@ -2748,7 +2550,7 @@ def multi_turn_conversation(qatuples: list, character: str, scenario: str, scena
             end_time = time.time()
             logger.info(f"Done! Completion took {(end_time - start_time) / 60} minutes to generate.")
             logger.info(f"Completion for 'multi_turn_conversation' function generated. Extracting response pattern...")
-            if DEBUG_MODE:
+            if get_config("DEBUG_MODE"):
                 logger.info(f"\n*** multi_turn_conversation COMPLETION ***: \n{completion}\n ***multi_turn_conversation COMPLETION ***\n")
 
     except Exception as e:
@@ -2761,7 +2563,7 @@ def multi_turn_conversation(qatuples: list, character: str, scenario: str, scena
     )
 
     generation = response_pattern.search(completion).group(1)
-    if DEBUG_MODE:
+    if get_config("DEBUG_MODE"):
         logger.info(f"\n*** multi_turn_conversation GENERATION:***\n\n-------------------\n\n {generation} \n*** multi_turn_conversation GENERATION: ***\n\n-------------------\n\n")
 
     # return (generation,"AI Assistant","A conversation between a helpful AI Assistant, and a user.","N/A",qatuples), completion
@@ -2906,8 +2708,8 @@ class MakeDatasetMultiturnConversationSimple: # TODO Write function documentatio
                     LLM, 
                     multi_turn_convs, 
                     multi_turn_convs_dir, 
-                    assistant_mode=ASSISTANT_MODE,
-                    logging_level=LOG_LEVEL
+                    assistant_mode=get_config("ASSISTANT_MODE"),
+                    logging_level=get_config("LOG_LEVEL")
                 ) for idx, info in enumerate(convs_info)
             ]
             asyncio.run(limited_tasks(tasks))
@@ -2915,6 +2717,7 @@ class MakeDatasetMultiturnConversationSimple: # TODO Write function documentatio
 
             results.append({
                 "filename": f"conv_{idx}.json",
+                "size_of_dataset": len([f for f in os.listdir(f"{folder_paths.get_output_directory()}") if f.startswith("conv_") and f.endswith(".json")])
                 "folder": file_path,
                 "type": self.type
             })
@@ -2927,9 +2730,9 @@ class MakeDatasetMultiturnConversationSimple: # TODO Write function documentatio
                     LLM, 
                     multi_turn_convs, 
                     multi_turn_convs_dir, 
-                    assistant_mode=ASSISTANT_MODE, 
-                    completion_mode=COMPLETION_MODE, 
-                    logging_level=LOG_LEVEL
+                    assistant_mode=get_config("ASSISTANT_MODE"), 
+                    completion_mode=get_config("COMPLETION_MODE"), 
+                    logging_level=get_config("LOG_LEVEL")
                 ) for idx, info in enumerate(convs_info)
             ]
             asyncio.run(limited_tasks(tasks))
@@ -3041,7 +2844,8 @@ class ChunkParagraphs:
             if sentencepiece_tokenizer_name is not None:
                 tokenizer = AutoTokenizer.from_pretrained(fr"{sentencepiece_tokenizer_name}")
             else:
-                logger.error(f"ERROR: No sentencepiece tokenizer specified.")
+                logger.error(f"ERROR: No sentencepiece tokenizer specified. Defaulting to 'Gryphe/MythoMax-L2-13b'")
+                tokenizer = AutoTokenizer.from_pretrained("Gryphe/MythoMax-L2-13b")
         except Exception as e:
             logger.exception(f"An Exception occured in return_clean_paragraphs function in class ChunkParagraphs when loading the tokenizer: {e}")
 
@@ -3070,8 +2874,8 @@ class ChunkParagraphs:
             (self.fix_text(conversions, seq[0]), seq[1]) for seq in sentence_chunks
         ]
 
-        print(len(paragraphs_processed)) 
-        print(paragraphs_processed[1]) 
+        print(len(cleaned_paragraphs)) 
+        print(cleaned_paragraphs[1]) 
 
         return (cleaned_paragraphs,)
 
@@ -3193,10 +2997,10 @@ class FilterAndFlatten:
                 first = f.read()
                 data = json.loads(first)
 
-        elif master_output_text is not None:
+        if master_output_text is not None:
             data = master_output_text
 
-        else:
+        if read_from_external_json == "True" and master_output_text is None:
             logging.error("No data was input into filter_and_flatten function in class FilterAndFlatten.")
             print("Either read it from a JSON or connect it to an input node such as 'Create a Simplified List Copy of the Dataset'.")
 
@@ -3209,10 +3013,11 @@ class FilterAndFlatten:
                 # Extend the flat_list with the elements from subsublist1
                 flat_list.extend(sublst[0])
 
-        return(flat_list, { "ui": { "text": len(flat_list) } })
+        return(flat_list, {"ui": { "text": len(flat_list)}})
 
-
-class FilterAndGraph: #TODO Write documentation for this function.
+#TODO Write documentation for this function.
+#TODO Make 
+class FilterAndGraph: 
     """
     This function takes a json file (?) and determines which paragraphs are worth of making questions from.
 
@@ -3281,7 +3086,7 @@ class FilterAndGraph: #TODO Write documentation for this function.
             logger.info(f"filtered_worthy_for_questions: {filtered_worthy_for_questions[0]} : filtered_worthy_for_questions")
 
             if plot_paragraphs == "True":
-                return (filtered_worthy_for_questions, { "ui": { "paragraphs_suitability_plot": paragraphs_suitability_plot } })
+                return (filtered_worthy_for_questions, { "ui": {"paragraphs_suitability_plot": paragraphs_suitability_plot} })
             else:
                 return (filtered_worthy_for_questions,)
 
@@ -3482,7 +3287,7 @@ def judge_paragraph(p: str, LLM: dict):
         # Extract the response pattern and determination from the completion.
         try:
             response = response_pattern.search(completion).group(1)
-            if DEBUG_MODE:
+            if get_config("DEBUG_MODE"):
                 logger.info(f"\n*** Response for 'judge_paragraph' function ***\n{response}\n*** Response for 'judge_paragraph' function ***\n")
 
             print("-------------------")
@@ -3565,7 +3370,7 @@ class JudgeParagraphs:
                             judged_worthy_for_questions, 
                             LLM, 
                             worthy_for_questions_output_dir, 
-                            USE_SUBSET
+                            get_config("USE_SUBSET")
                         )
                     )
                     return(judged_worthy_for_questions,)
@@ -3582,7 +3387,7 @@ class JudgeParagraphs:
                             judged_worthy_for_questions, 
                             LLM, 
                             worthy_for_questions_output_dir, 
-                            USE_SUBSET
+                            get_config("USE_SUBSET")
                         )
                     )
                     return(judged_worthy_for_questions,)
@@ -3611,7 +3416,8 @@ class JudgeParagraphs:
 
 def create_character_card_many_tuples(qatuples, plan, instructions, initialized_model, cheap_mode=False):  # Use cheap mode if you don't have the compute power to crank up the context to 8k using RoPE
     """
-    Produce a plan for a character card for an RP character that's going to answer one of the questions generated from the text. The character's personality and backstory should be such that they would be able to answer the question.
+    Produce a plan for a character card for an RP character that's going to answer one of the questions generated from the text. 
+    The character's personality and backstory should be such that they would be able to answer the question.
     Format: Question: [question]\n\n
     """
 
@@ -3655,7 +3461,7 @@ def create_character_card_many_tuples(qatuples, plan, instructions, initialized_
         )["choices"][0]["text"]
 
         end_time = time.time()
-        if DEBUG_MODE:
+        if get_config("DEBUG_MODE"):
             logger.info(f"\n*** Completion for 'create_character_card_plan_many_tuples' function ***\n{completion}\n*** Completion for 'create_character_card_plan_many_tuples' function ***\n")
         logger.info(f"Completion took {(end_time - start_time) / 60} minutes to complete.")
         logger.info(f"Completion for 'create_character_card_many_tuples' function generated. Extracting response pattern...")
@@ -3669,7 +3475,7 @@ def create_character_card_many_tuples(qatuples, plan, instructions, initialized_
         re.IGNORECASE | re.DOTALL,
     )
     generation = response_pattern.search(completion).group(1)
-    if DEBUG_MODE:
+    if get_config("DEBUG_MODE"):
         logger.info(f"\nGeneration for 'create_character_card_many_tuples' function ***\n{generation}\n *** Generation for 'create_character_card_many_tuples' function")
 
     return generation, completion
@@ -3694,9 +3500,9 @@ def create_character_card_plan_many_tuples(qatuples, initialized_model):
     if toggle_for_special_functions == "special_instructions":
         instructions_string = special_instructions(n=1)
     elif toggle_for_special_functions == "special_instructions_prototype":
-            instructions_string = special_instructions_prototype(n=1)
+        instructions_string = special_instructions_prototype(n=1)
     else:
-            instructions_string = special_instructions_prototype2(n=1)
+        instructions_string = special_instructions_prototype2(n=1)
 
     prompt_content = {
         "qatuples": qatuples,
@@ -3728,7 +3534,7 @@ def create_character_card_plan_many_tuples(qatuples, initialized_model):
         )["choices"][0]["text"]
 
         end_time = time.time()
-        if DEBUG_MODE:
+        if get_config("DEBUG_MODE"):
             logger.info(f"\n*** Completion for 'create_character_card_plan_many_tuples' function ***\n{completion}\n*** Completion for 'create_character_card_plan_many_tuples' function ***\n")
         logger.info(f"Completion took {(end_time - start_time) / 60} minutes to generate.")
         logger.info(f"Completion for 'create_character_card_plan_many_tuples' function generated. Extracting response pattern...")
@@ -3743,7 +3549,7 @@ def create_character_card_plan_many_tuples(qatuples, initialized_model):
 
     # Extract the character card plan from the LLM's completion.
     generation = response_pattern.search(completion).group(1)
-    if DEBUG_MODE:
+    if get_config("DEBUG_MODE"):
         logger.info(f"\nGeneration for 'create_character_card_plan_many_tuples' function ***\n{generation}\n *** Generation for 'create_character_card_plan_many_tuples' function")
 
     return generation, instructions_string, completion
@@ -3863,7 +3669,7 @@ def create_scenario_plan_many_tuples(qatuples, character, initialized_model):
     )
 
     generation = response_pattern.search(completion).group(1)
-    if DEBUG_MODE:
+    if get_config("DEBUG_MODE"):
         logger.info(f"\n create_scenario_plan_many_tuples GENERATION:\n\n-------------------\n\n {generation}\ncreate_scenario_plan_many_tuples GENERATION\n------------------)")
     time.sleep(5)
 
@@ -3902,7 +3708,7 @@ def create_scenario_plan_many_tuples(qatuples, character, initialized_model):
 # Two-three short answers per response should be enough.
 def make_multiturn_character(qa_tuples, conv_id, initialized_model):
     # If assistant mode is on, multiturn convs will have hardcoded information in its prompt file; but we still need to put something in the file
-    if (ASSISTANT_MODE):  
+    if get_config("ASSISTANT_MODE"): 
         return "will_be_replaced", "will_be_replaced"
 
     # I will reuse the many tuples function for short question-answers, there's a lot of prompting in here already
@@ -3919,7 +3725,7 @@ def make_multiturn_conversation_info(qa_tuples, initialized_model):
     conv_id = make_id()
 
     # If assistant mode is on, multiturn convs will have hardcoded information in its prompt file; but we still need to put something in the file
-    if (ASSISTANT_MODE):  
+    if get_config("ASSISTANT_MODE"): 
         return (qa_tuples, "will", "be", "replaced", conv_id)
 
     # thought_plan = create_thought_plan_many_tuples(qa_tuples,character,scenario,initialized_model)
@@ -3936,7 +3742,7 @@ def make_multiturn_scenario(qa_tuples, character, conv_id, initialized_model):
     attempts = 0
 
     # If assistant mode is on, multiturn convs will have hardcoded information in its prompt file; but we still need to put something in the file.
-    if (ASSISTANT_MODE):  
+    if get_config("ASSISTANT_MODE"):  
         return "will_be_replaced", "will_be_replaced"
 
     # Create a scenario plan based on a character card and a QA tuple.
@@ -3985,10 +3791,10 @@ class ReturnMultiturnConversationInfoSimple: # TODO Write function documentation
                                             purge_loaded_llm_from_memory_after_node_is_done):
 
         # Set the assistant_mode boolean variable.
-        if assistant_mode_arg == "On":
-            ASSISTANT_MODE = True
-        else:
-            ASSISTANT_MODE = False
+        #if assistant_mode_arg == "On":
+       #     ASSISTANT_MODE = True
+       # else:
+       #     ASSISTANT_MODE = False
 
         if not os.path.exists(f"./{multi_turn_convs_info_dir}"):
             os.makedirs(f"./{multi_turn_convs_info_dir}")
@@ -4033,12 +3839,12 @@ class ReturnMultiturnConversationInfoSimple: # TODO Write function documentation
                 augmentoolkit_async_2_functions.create_info(
                     idx,group,
                     LLM, 
-                    ASSISTANT_MODE, 
+                    get_config("ASSISTANT_MODE"), 
                     multi_turn_convs_info,
                     multi_turn_convs_info_dir, 
-                    rearrangements_to_take=REARRANGEMENTS_TO_TAKE,
-                    use_filenames=USE_FILENAMES,  
-                    logging_level=LOG_LEVEL) for idx,group in enumerate(qa_tuples_by_paragraph)
+                    rearrangements_to_take=get_config("REARRANGEMENTS_TO_TAKE"),
+                    use_filenames=get_config("USE_FILENAMES"),  
+                    logging_level=get_config("LOG_LEVEL")) for idx,group in enumerate(qa_tuples_by_paragraph)
             ]
             limited_tasks_infocreation = [run_task_with_limit(task) for task in tasks]
             asyncio.run(run_tasks(limited_tasks_infocreation))
@@ -4048,12 +3854,12 @@ class ReturnMultiturnConversationInfoSimple: # TODO Write function documentation
                 augmentoolkit_async_2_functions.create_info(
                     idx,group,
                     LLM, 
-                    ASSISTANT_MODE, 
+                    get_config("ASSISTANT_MODE"), 
                     multi_turn_convs_info,
                     multi_turn_convs_info_dir, 
-                    rearrangements_to_take=REARRANGEMENTS_TO_TAKE,
-                    use_filenames=USE_FILENAMES, 
-                    logging_level=LOG_LEVEL) for idx,group in enumerate(qa_tuples_by_paragraph)
+                    rearrangements_to_take=get_config("REARRANGEMENTS_TO_TAKE"),
+                    use_filenames=get_config("USE_FILENAMES"), 
+                    logging_level=get_config("LOG_LEVEL")) for idx,group in enumerate(qa_tuples_by_paragraph)
             ]
             limited_tasks_infocreation = [run_task_with_limit(task) for task in tasks]
             asyncio.run(run_tasks(limited_tasks_infocreation))
@@ -4113,7 +3919,7 @@ class GroupVettedTuplesByText:
                 placed = False
 
                 for dict_q in question_dict.keys():
-                    if has_sequential_chars(question,dict_q,N_CHARACTERS_SAME):
+                    if has_sequential_chars(question,dict_q,get_config("N_CHARACTERS_SAME")):
                         question_dict[dict_q].append(q_tuple)
                         placed = True
                         break
@@ -4283,7 +4089,7 @@ class LlmLoaderAphroditeSimple:
         return {
             "required": {
                 "model_name": (folder_paths.get_filename_list("llm"),), # String
-                "quantization": (["gptq","awq","gguf","quip","squeezellm",None]) # list
+                "quantization": (["gptq","awq","gguf","quip","squeezellm",None]) # List
             },
             "optional": {
             },
@@ -4309,8 +4115,8 @@ class LlmLoaderAphroditeSimple:
         time.sleep(3)
 
         # Record the model name and presets to the debug log.
-        logger.info(f"Aphrodite: Model {model_name} succesfully loaded.")
-        logger.info(f"\nAphrodite Model presets:\nquantization={quantization}\nengine_use_ray=False\ndisable_log_requests=True\nmax_model_len=12000\ndtype='float16'\n")
+        logger.info(f"Aphrodite-Engine: Model {model_name} succesfully loaded.")
+        logger.info(f"\nAphrodite-Engine Model presets:\nquantization={quantization}\nengine_use_ray=False\ndisable_log_requests=True\nmax_model_len=12000\ndtype='float16'\n")
         time.sleep(3)
         
         # Put the engine wrapper and other arguments into the config_list
@@ -4318,7 +4124,7 @@ class LlmLoaderAphroditeSimple:
             'llm': engine_wrapper,
             'type': 'aphrodite',
             'prompt': None,
-            'sampling_settings': None,
+            'sampling_params': None,
             'override_aphrodite_sampling_presets': False,
         }
 
@@ -4397,63 +4203,6 @@ class LlmLoaderSimple:
             logger.exception(f"An Exception occured in load_model function in class LlmLoaderSimple: {e}")
             # We want to raise an exception here, since NOTHING can be done in augmentoolkit without LLM generations.
             raise e
-
-        # Export the "LLM" dictionary object.
-        return ({"LLM": config_list},)
-
-
-# TODO: Rename all the INITIALIZED_LLM categories to just LLM so that it can be plug-in-play with ComfyUI-Llama
-class LLM_Load_Model:
-    """
-    Load a llama.cpp model from model_path.
-    (easy version)
-    From ComfyUI-Llama: https://github.com/daniel-lewis-ab/ComfyUI-Llama/blob/main/Llama.py
-    https://llama-cpp-python.readthedocs.io/en/latest/api-reference/#llama_cpp.Llama.__init__
-    """
-
-    @classmethod
-    def INPUT_TYPES(s):
-        return {
-            "required": {
-                "model_name": (folder_paths.get_filename_list("llm"), ), # String
-            },
-            "optional": {
-                "n_ctx": ("INT", {"default": 12000, "step":1, "min":2056}),
-            }
-        }
-
-    # ComfyUI will effectively return the Llama class instantiation provided by execute() and call it an LLM
-    RETURN_TYPES = ("LLM",)
-    FUNCTION = "execute"
-    CATEGORY = "augmentoolkit_functions/advanced/debug"
-
-    def execute(self, model_name:str, n_ctx:int):
-
-        # basically just calls __init__ on the Llama class
-        model_path = folder_paths.get_full_path("llm", model_name)
-        config_list = []
-
-        try: # Load the model.
-            llm = Llama(
-                model_path=model_path,
-                n_gpu_layers=100,
-                n_ctx=n_ctx, 
-                seed=-1,
-            )
-
-            # Fill the config_list.
-            config_list = [
-                {
-                    'llm': llm,
-                    'type': 'llamacpp',
-                    'prompt': None,
-                    'grammar': None,
-                    'override_llm_presets': False
-                }
-            ]
-
-        except ValueError:
-            logger.exception("The model path does not exist. Perhaps hit Ctrl+F5 and try reloading it.")
 
         # Export the "LLM" dictionary object.
         return ({"LLM": config_list},)
@@ -4600,8 +4349,10 @@ class OverrideLlmPresetsInConnectedNodeAphrodite:
                           logits_processors=logits_processors,
             )
             logger.info(f"Aphrodite LLM override parameters set.")
-            if DEBUG_MODE: #TODO Set this debug up
-                logger.info("Current Sampling Parameters:")
+            if get_config("DEBUG_MODE"): #TODO Set this debug up
+                logger.info("Current Aphrodite-Engine Sampling Parameters:")
+                for key, value in sampling_params.keywords.items():
+                    logger.info(f"    {key}: {value}")
             time.sleep(3)
 
             # Set up a config list to be exported under the "LLM" object type.
@@ -5037,7 +4788,39 @@ NODE_DISPLAY_NAME_MAPPINGS = {
 #### OTHER ODDS AND ENDS ####
 #############################
 
+async def make_async_api_call(
+    prompt=None, sampling_parameters={}, url="http://127.0.0.1:8080", messages=None
+):
+    # Determine the endpoint based on the presence of messages
+    if messages is not None:
+        endpoint = "/v1/chat/completions"
+        data = json.dumps(
+            {
+                "messages": messages,
+                **sampling_parameters,  # Assuming sampling parameters can be applied to chat
+            }
+        )
+    else:
+        endpoint = "/completion"
+        data = json.dumps({"prompt": prompt, **sampling_parameters})
 
+    # Complete the URL with the chosen endpoint
+    full_url = url + endpoint
+
+    # Use aiohttp to make the async request
+    async with aiohttp.ClientSession() as session:
+        async with session.post(
+            full_url, data=data, headers={"Content-Type": "application/json"}, ssl=False
+        ) as response:
+            if response.status == 200:
+                # Parse the JSON response
+                response_json = await response.json()
+                if prompt:
+                    return prompt + response_json["content"]
+                else:
+                    return response_json["choices"][0]["content"]
+            else:
+                return {"error": f"API call failed with status code: {response.status}"}
 
 class EngineWrapper:
     def __init__(self, model, 
@@ -5073,7 +4856,7 @@ class EngineWrapper:
         if "n_predict" not in sampling_params and self.mode == "llamacpp":
             sampling_params["n_predict"] = sampling_params["max_tokens"]
 
-        if DEBUG_MODE:
+        if get_config("DEBUG_MODE"):
             logger.info(f"\n\nSETTINGS DUMP\n\n{self.model}\n{prompt}\n{sampling_params['temperature']}\n{sampling_params['top_p']}\n{sampling_params['max_tokens']}\n")
 
         if self.mode == "llamacpp": # Should never reach this route, as mode will never be set to this value.

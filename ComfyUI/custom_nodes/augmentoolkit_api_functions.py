@@ -27,25 +27,11 @@ from aphrodite import SamplingParams
 
 from custom_nodes import logger, augmentoolkit
 import folder_paths
+from program_configs import get_config
 
 from custom_nodes.logger import logger
 
 from custom_nodes.augmentoolkit import (
-    API_KEY,
-    ASSISTANT_MODE, # Global variables
-    BASE_URL,
-    COMPLETION_MODE,
-    CONCURRENCY_LIMIT, 
-    DEBUG_MODE, 
-    DOUBLE_CHECK_COUNTER, 
-    GRAMMAR_DICT,
-    GRAPH,
-    MODE,
-    NAMES,
-    PROMPT_DICT,
-    REARRANGEMENTS_TO_TAKE,
-    USE_FILENAMES, 
-    USE_SUBSET, 
     EngineWrapper, # Functions
     extract_name, 
     format_external_text_like_f_string,
@@ -90,13 +76,13 @@ class ChatGPT:
         if open_ai_api_key is None:
             logger.info("'open_ai_api_key' argument not specified. Defaulting to API key from config.yaml.")
             try:
-                engine_wrapper = EngineWrapper(model=model_name, mode="api", api_key=API_KEY, base_url=BASE_URL,)
+                engine_wrapper = EngineWrapper(model=model_name, mode="api", api_key=get_config("API_KEY"), base_url=BASE_URL,)
                 config_list = [
                     {
                         'llm': engine_wrapper,
                         'type': 'api',
                         'api_subtype': 'openai',
-                        'api_key': API_KEY,
+                        'api_key': get_config("API_KEY"),
                     }
                 ]
             except Exception as e:
@@ -112,6 +98,8 @@ class ChatGPT:
                         'type': 'api',
                         'api_sub_type': 'openai',
                         'api_key': open_ai_api_key,
+                        'prompt': None,
+                        'sampling_params': None,
                     }
                 ]
             except Exception as e:
@@ -153,6 +141,8 @@ class LM_Studio:
                     'api_subtype': 'lm_studio',
                     'api_key': api_key,
                     'base_url': api_base,
+                    'prompt': None,
+                    'sampling_params': None,
                 }
             ]
         except Exception as e:
@@ -191,6 +181,8 @@ class Ollama:
                     'apit_subtype': 'ollama',
                     'api_type': api_type, #Holdover from the original code. Kept for backwards compatability, if it's even feasible.
                     'api_base': api_base,
+                    'prompt': None,
+                    'sampling_params': None,
                 }
             ]
         except Exception as e:

@@ -9,6 +9,7 @@ import random
 import itertools
 import glob
 import uuid
+from zoneinfo import InvalidTZPathWarning
 import yaml
 
 # Import global variables and functions.
@@ -31,7 +32,8 @@ from augmentoolkit import (
 
 
 import folder_paths
-from custom_nodes.logger import logger
+from program_configs import get_config
+from logger import logger
 
 from math import ceil
 from typing import Any, List, Tuple, Union
@@ -49,7 +51,9 @@ from collections import Counter
 from custom_nodes.augmentoolkit import (
     escape_unescaped_quotes,
     extract_capital_letters,
+    extract_first_words,
     extract_name,
+    extract_steps,
     extract_question_answer,
     format_qatuples,
     identify_duplicates,
@@ -59,10 +63,34 @@ from custom_nodes.augmentoolkit import (
     special_instructions
 )
 
-import folder_path
-
 with open('./config.yaml', 'r') as file:
     obj_conf = yaml.safe_load(file)
+
+
+
+def override_presets(LLM: dict, function_name: str, sampling_params: dict, prompt: str):
+
+    try:
+        override = LLM[f'override_{function_name}_presets']
+
+        if override['sampling_params'] is not None:
+            sampling_params = override['sampling_params']
+            logger.info(f"Sampling parameters for '{function}' overriden.")
+            logger.info(f"New Sampling Parameters for '{function}':")
+            for key, value in sampling_params.keywords.items():
+                logger.info(f"    {key}: {value}")
+            
+        if override['prompt'] is not None:
+            prompt = override['prompt']
+            logger.info(f"Prompt for '{function}' overriden.")
+            logger.info(f"New Prompt for '{function}':\n{prompt}")
+
+    except KeyError:
+        logger.info(f"Overrides for '{function_name}' not present. Using default settings.")
+
+    return sampling_params, prompt
+
+
 
 # Used basically everywhere:
 def make_id():
@@ -77,8 +105,8 @@ augmentoolkit.write_output_to_file
 # multiturn helpers
 # These will probably be used for multiturn rapid-fire answering.
 
-def create_conv_starter(character):
-    charname = extract_name.extract_name(character)
+def create_conv_starter(character: str):
+    charname = extract_name(character)
     first_words_of_card = extract_first_words(charname, character)
     conv_starters = [  # prevents it from regurgitating the card (when combined with filtering)
         "Ah",
@@ -102,7 +130,7 @@ def create_conv_starter(character):
     ]
     return random.choice(conv_starters_filtered)
 
-def create_starting_str(qatuples):
+def create_starting_str(qatuples: Tuple):
     author_name_letters = extract_capital_letters(qatuples[0][3])
     starting_str = ""
     exclusions = ["X", "Z", "Y", "Q"]
@@ -112,9 +140,11 @@ def create_starting_str(qatuples):
         starting_str = select_random_capital(exclusions)
     return starting_str
 
-# Idea: use multiple short answers to train the task of answering multiple questions in one response. Like, "Tell me what 2+2 is then tell me who won the battle of Alesia". Two-three short answers per response should be enough.
+# Idea: use multiple short answers to train the task of answering multiple questions in one response. 
+# Like, "Tell me what 2+2 is then tell me who won the battle of Alesia". 
+# Two-three short answers per response should be enough.
 async def make_multiturn_character(
-    qa_tuples, conv_id, assistant_mode=False, character_card_plan_creator=None, character_card_creator=None,completion_mode=None
+    qa_tuples: str, conv_id: int, assistant_mode=False, character_card_plan_creator=None, character_card_creator=None,completion_mode=None
 ):
     if (assistant_mode):  # If assistant mode is on, multiturn convs will have hardcoded information in its prompt file; but we still need to put something in the file
         return "will_be_replaced", "will_be_replaced"
@@ -159,7 +189,6 @@ async def make_multiturn_character(
             "special_instructions": instructions,
             "plan": plan,
             "starting_str": starting_str
-            
         }
     )  # creates a character card
     write_output_to_file(char_output, OUTPUT + "/multiturn_card_generations", conv_id)
@@ -167,7 +196,7 @@ async def make_multiturn_character(
 
 
 async def make_multiturn_scenario(
-    qa_tuples, character, conv_id, assistant_mode=False, scenario_plan_creator=None, scenario_creator=None, completion_mode=None
+    qa_tuples: Tuple, character: str, conv_id: int, assistant_mode=False, scenario_plan_creator=None, scenario_creator=None, completion_mode=None
 ):
     if (
         assistant_mode
@@ -238,9 +267,8 @@ async def make_multiturn_conversation_info(
     completion_mode=None
 ):
     conv_id = make_id()
-    if (
-        assistant_mode
-    ):  # If assistant mode is on, multiturn convs will have hardcoded information in its prompt file; but we still need to put something in the file
+    # If assistant mode is on, multiturn convs will have hardcoded information in its prompt file; but we still need to put something in the file
+    if assistant_mode:  
         return (qa_tuples, "will", "be", "replaced", conv_id)
     # thought_plan = create_thought_plan_many_tuples(qa_tuples,character,scenario,logic_llm) # There IS a way to make multiturn chain of thought answering work: generate each pair of messages using a separate prompt or a separate function, each of which has only the thought plan for that question/answer pair. But simply cramming in all the step-by-step things will confuse the hell out of the poor model. So for the first release version we're skipping it and just giving the response, with no reasoning, in the multiturn convs.
     retries = 0
@@ -256,7 +284,7 @@ async def make_multiturn_conversation_info(
             completion_mode=completion_mode
         )
         if "What's your backstory?" not in character:
-            logger.warning("Failed to properly generate card, retrying")
+            logger.warning("Failed to properly generate card, retrying...")
             continue
         done = True
     scenario, scenario_plan = await make_multiturn_scenario(
@@ -349,8 +377,8 @@ async def repair_qatuple_context(
         engine_wrapper=engine_wrapper,
         logging_level=logging_level,
         output_processor=extract_reasoning_from_context_check,
-        prompt_folder=PROMPTS,
-        default_prompt_folder=DEFAULT_PROMPTS
+        prompt_folder=folder_paths.get_prompts_directory(),
+        default_prompt_folder=folder_paths.get_default_prompts_directory,
     )
 
     # Resume normal control flow
@@ -480,7 +508,7 @@ async def vet_answer_accuracy_loop(
     
     try:
         qtuple = qa_tuple
-        if DEBUG_MODE:
+        if get_config("DEBUG_MODE"):
             logger.info(f"\n\nStarting ACCURACY loop for question: {qtuple[0]}, context: {qtuple[2]}")
 
         passed_checks = 0
@@ -488,7 +516,7 @@ async def vet_answer_accuracy_loop(
         dissenting_reasoning = ""
         while times_checked < double_check_counter:
             
-            if DEBUG_MODE:
+            if get_config("DEBUG_MODE"):
                 logger.info(f"\n\nACCURACY CALL CHECK ANSWER: {qtuple[0]}, context: {qtuple[2]}, retries: {total_retries}, dissenting reasoning: {dissenting_reasoning}")
 
             judgement, answer_accuracy_output = await answer_accuracy_checker.generate(
@@ -513,12 +541,12 @@ async def vet_answer_accuracy_loop(
                 break
 
         if passed_checks >= ceil(double_check_counter / 2):  # if question checks passed
-            if DEBUG_MODE:
+            if get_config("DEBUG_MODE"):
                 logger.info(f"\n\ANSWER ACCURACY CHECKS PASSED retries: {total_retries}")
             return qtuple
         else:
             # Generate new question and restart the loop
-            if DEBUG_MODE:
+            if get_config("DEBUG_MODE"):
                 logger.info(f"\n\nACCURACY CHECKS FAILED - SENDING BACK TO QUESTION LOOP retries: {total_retries}")
 
             total_retries += 1
@@ -590,7 +618,7 @@ async def vet_answer_relevance_loop(
     check_ans_relevancy_regex = re.compile(
                 r"Reasoning and thought process \(be careful about extra details, even vague ones\):\n(.+)",
                 re.DOTALL | re.IGNORECASE,
-            )
+    )
     
     if completion_mode:
         prompt_path_ans_relevancy_check = prompt_path_ans_relevancy_check + ".txt"
@@ -625,16 +653,14 @@ async def vet_answer_relevance_loop(
     # Resume normal control flow code
     try:
         qtuple = qa_tuple
-        # print(
-        # f"\n\nStarting RELEVANCE loop for question: {qtuple[0]}, context: {qtuple[2]}"
-        # )
+        if get_config("DEBUG_MODE"):
+            logger.info(f"\n\nStarting RELEVANCE loop for question: {qtuple[0]}, context: {qtuple[2]}")
         passed_checks = 0
         times_checked = 0
         dissenting_reasoning = ""
         while times_checked < double_check_counter:
-            # print(
-            # f"\n\nRELEVANCE CALL CHECK ANSWER: {qtuple[0]}, context: {qtuple[2]}, retries: {total_retries}, dissenting reasoning: {dissenting_reasoning}"
-            # )
+            if get_config("DEBUG_MODE"):
+                logger.info("\n\nRELEVANCE CALL CHECK ANSWER: {qtuple[0]}, context: {qtuple[2]}, retries: {total_retries}, dissenting reasoning: {dissenting_reasoning}")
             (
                 judgement,
                 answer_relevancy_output,
@@ -660,7 +686,8 @@ async def vet_answer_relevance_loop(
                 break
 
         if passed_checks >= ceil(double_check_counter / 2):
-            # print(f"\n\nRELEVANCE CHECKS PASSED")
+            if get_config("DEBUG_MODE"):
+                logger.info("\n\nRELEVANCE CHECKS PASSED")
             return await vet_answer_accuracy_loop(
                 qtuple,
                 total_retries,
@@ -673,7 +700,8 @@ async def vet_answer_relevance_loop(
                 new_q_generator=new_q_generator
             )
         else:
-            # print(f"\n\nRELEVANCE CHECKS FAILED - SENDING BACK TO QUESTION LOOP")
+            if get_config("DEBUG_MODE"):
+                logger.info("\n\nRELEVANCE CHECKS FAILED - SENDING BACK TO QUESTION LOOP")
             total_retries += 1
             para = qtuple[2]
             para_name = qtuple[3]
@@ -932,7 +960,7 @@ async def vet_question_loop(
 
 def extract_questions_from_response_completionmode(generation):
     questions = []
-    if DEBUG_MODE:
+    if get_config("DEBUG_MODE"):
         logger.info(f"!! Model Output: !!\n{generation}")
 
     pattern = re.compile(
@@ -953,7 +981,7 @@ def extract_questions_from_response_completionmode(generation):
                 # para_tuple[1].replace(") ", "", 1),
             )
         )
-    if DEBUG_MODE:
+    if get_config("DEBUG_MODE"):
         logger.info(f"\n\n\nExtract questions from response DEBUG!!!\n{questions}")
 
     return questions
@@ -961,7 +989,7 @@ def extract_questions_from_response_completionmode(generation):
 def extract_questions_from_response_chatmode(generation): # TODO extract to non-controlflow file
     print(generation)
     questions = []
-    if DEBUG_MODE:
+    if get_config("DEBUG_MODE"):
         logger.info(f"!! Model Output: !!\n{generation}")
 
     pattern = re.compile(
@@ -982,7 +1010,7 @@ def extract_questions_from_response_chatmode(generation): # TODO extract to non-
                 # para_tuple[1].replace(") ", "", 1),
             )
         )
-    if DEBUG_MODE:
+    if get_config("DEBUG_MODE"):
         logger.info(f"\n\n\nExtract questions from response DEBUG!!!\n{questions}")
 
     return questions
@@ -1000,7 +1028,7 @@ def extract_question_from_response_completionmode(generation): # TODO extract to
         raise Exception("Failed to generate questions!") # Because of how the generate step class is structured, this raise will cause a retry, as the original did. No it's not using an exception for normal control flow, if the llm screwed up that's an error.
 
     for match in matches:
-        if DEBUG_MODE:
+        if get_config("DEBUG_MODE"):
             logger.info(f"\n\n\nExtract questions from response DEBUG!!!\n{questions}")
 
         return (
@@ -1021,7 +1049,7 @@ def extract_question_from_response_chatmode(generation): # TODO extract to non-c
         raise Exception("Failed to generate questions!") # Because of how the generate step class is structured, this raise will cause a retry, as the original did. No it's not using an exception for normal control flow, if the llm screwed up that's an error.
 
     for match in matches:
-        if DEBUG_MODE:
+        if get_config("DEBUG_MODE"):
             logger.info(f"\n\n\nExtract questions from response DEBUG!!!\n{match}") # Maybe this is right???
 
         return (
@@ -1063,27 +1091,27 @@ async def generate_qatuples_from_para(
         prompt_path=prompt_path_qatuples_plan,
         regex=qatuples_plan_regex,
         sampling_params={
-        "max_tokens": 3000,
-        "stop": [
-            "### Response",
-            "\n\n\n\n\n",
-            "</s>",
-            "# Input:",
-            "[INST]",
-            "### Instruction",
-            "[INST",
-            "Text to plan questions from"
-        ],
-        "temperature": 0.8,
-        # top_k=-1,
-        "top_p": 1,
-        # min_p=0.5,
+            "max_tokens": 3000,
+            "stop": [
+                "### Response",
+                "\n\n\n\n\n",
+                "</s>",
+                "# Input:",
+                "[INST]",
+                "### Instruction",
+                "[INST",
+               "Text to plan questions from"
+            ],
+            "temperature": 0.8,
+            # top_k=-1,
+            "top_p": 1,
+            # min_p=0.5,
         },
         completion_mode=completion_mode,
         retries=0,
         engine_wrapper=engine_wrapper,
         logging_level=logging_level,
-        prompt_folder=PROMPTS,
+        prompt_folder=get_config("PROMPTS"),
         default_prompt_folder=DEFAULT_PROMPTS
     )
     
@@ -1106,27 +1134,27 @@ async def generate_qatuples_from_para(
             prompt_path=prompt_path_qatuples_gen,
             regex=qatuples_gen_regex,
             sampling_params={
-                    "max_tokens": 2000,
-                    "stop": [
-                        "### Response",
-                        "\n\n\n\n\n",
-                        "</s>",
-                        "# Input:",
-                        "[INST]",
-                        "### Instruction",
-                        "[INST",
-                    ],
-                    "temperature": 0.8,
-                    # top_k=-1,
-                    "top_p": 1,
-                    # min_p=0.5,
-                },
+                "max_tokens": 2000,
+                "stop": [
+                    "### Response",
+                    "\n\n\n\n\n",
+                    "</s>",
+                    "# Input:",
+                    "[INST]",
+                    "### Instruction",
+                     "[INST",
+                ],
+                "temperature": 0.8,
+                # top_k=-1,
+                "top_p": 1,
+                # min_p=0.5,
+            },
             completion_mode=completion_mode,
             retries=3,
             engine_wrapper=engine_wrapper,
             logging_level=logging_level,
             output_processor=extract_questions_from_response_completionmode,
-            prompt_folder=PROMPTS,
+            prompt_folder=get_config("PROMPTS"),
         default_prompt_folder=DEFAULT_PROMPTS
         )
     else:
@@ -1134,27 +1162,27 @@ async def generate_qatuples_from_para(
             prompt_path=prompt_path_qatuples_gen,
             regex=qatuples_gen_regex,
             sampling_params={
-                    "max_tokens": 2000,
-                    "stop": [
-                        "### Response",
-                        "\n\n\n\n\n",
-                        "</s>",
-                        "# Input:",
-                        "[INST]",
-                        "### Instruction",
-                        "[INST",
-                    ],
-                    "temperature": 0.8,
-                    # top_k=-1,
-                    "top_p": 1,
-                    # min_p=0.5,
-                },
+                "max_tokens": 2000,
+                "stop": [
+                    "### Response",
+                    "\n\n\n\n\n",
+                    "</s>",
+                    "# Input:",
+                    "[INST]",
+                    "### Instruction",
+                    "[INST",
+                ],
+                "temperature": 0.8,
+                # top_k=-1,
+                "top_p": 1,
+                # min_p=0.5,
+            },
             completion_mode=completion_mode,
             retries=3,
             engine_wrapper=engine_wrapper,
             logging_level=logging_level,
             output_processor=extract_questions_from_response_chatmode,
-            prompt_folder=PROMPTS,
+            prompt_folder=get_config("PROMPTS"),
             default_prompt_folder=DEFAULT_PROMPTS
         )
     # Resume normal control flow code
@@ -1171,7 +1199,7 @@ async def generate_qatuples_from_para(
                 vetted_qa_tuples.append(qa_tuple)
             return
         question_group_id = make_id()
-        if DEBUG_MODE:
+        if get_config("DEBUG_MODE"):
             logger.info(f"\n\n\nOUTER LOOP CALL GENERATE QPLAN para: {para}, \n\n idx: {idx}")
         (
             plan,
@@ -1185,7 +1213,7 @@ async def generate_qatuples_from_para(
         write_output_to_file(
             questions_plan_output, OUTPUT + "/question_plan_generations", question_group_id
         )
-        if DEBUG_MODE:
+        if get_config("DEBUG_MODE"):
             logger.inf(f"\n\n\nOUTER LOOP CALL GENERATE Q: {para}, \n\n idx: {idx} \n\n plan: {plan}")
 
         (
@@ -1206,7 +1234,7 @@ async def generate_qatuples_from_para(
             question_group_id,
         )
         for qnum, question_answer_tuple in enumerate(question_answer_tuples_more_info):
-            if DEBUG_MODE:
+            if get_config("DEBUG_MODE"):
                 logger.info(f"\n\n=======!!=BEGIN VETTING QA TUPLE {idx}_{qnum}=!!=======\n\n")
             good_qa_tuple = await vet_question_loop(
                 question_answer_tuple,
@@ -1273,7 +1301,7 @@ async def determine_worthy(
     p,
     judged_worthy_for_questions,
     output_dir,
-    judge: GenerationStep,
+    judge, #GenerationStep
 ):
     # for idx, p in tqdm(enumerate(paragraphs_processed[:10])):
     file_name = f"{idx}.json"
@@ -1376,8 +1404,8 @@ async def filter_all_questions(
         logging_level=logging_level, # TODO change to warning
         output_processor=judge_paragraph_processor,
         return_input_too=False,
-        prompt_folder=PROMPTS,
-        default_prompt_folder=DEFAULT_PROMPTS
+        prompt_folder=get_config("PROMPTS"),
+        default_prompt_folder=get_config("DEFAULT_PROMPTS")
     )
     if not take_subset:
         tasks = [
@@ -1440,7 +1468,7 @@ async def ensure_multiple_answers_are_same(
 
 
 async def make_multiturn_conversation(info, multi_turn_conv_generator, completion_mode=None):
-    charname = extract_name.extract_name(info[1])
+    charname = extract_name(info[1])
     conv_starter = create_conv_starter(info[1])
     if completion_mode:
         conv, conv_output = await multi_turn_conv_generator.generate(
@@ -1455,46 +1483,48 @@ async def make_multiturn_conversation(info, multi_turn_conv_generator, completio
         )
     else:
         conv, conv_output = await multi_turn_conv_generator.generate(
-        arguments = {
-            "character": info[1].strip(),
-            "scenario": info[2].strip(),
-            "extra_info": info[3].strip(),
-            "question_answer_list": escape_unescaped_quotes(format_qatuples(info[0])).replace("\n","\\n"),
-            "charname": charname.strip(),
-            "conv_starter": conv_starter.strip(),
-        }
+            arguments = {
+                "character": info[1].strip(),
+                "scenario": info[2].strip(),
+                "extra_info": info[3].strip(),
+                "question_answer_list": escape_unescaped_quotes(format_qatuples(info[0])).replace("\n","\\n"),
+                "charname": charname.strip(),
+                "conv_starter": conv_starter.strip(),
+            }
         )
-    output = get_output_directory()
+    output = folder_paths.get_output_directory()
     write_output_to_file(conv_output, output + "/multiturn_conversation_generations", info[4])
 
     return (conv, info[1], info[2], info[3], info[0])
 
 def select_variation(character): # can help following the groove of the few-shot examples, in the case where you're using a slightly stupid model or low temperature
-    charname=extract_name.extract_name(character)
+    charname = extract_name(character)
     variations = [
-    # "Set against the backdrop of",
-    f"In {charname}'s ",
-    "Amidst the surroundings of ",
-    # "Within the confines of",
-    f"Within {charname}'s ",
-    f"Inside {charname}'s ",
-    # f"Inside the confines of ",
-    f"Inside the confines of {charname}'s",
-    f"Set amongst the",
+        # "Set against the backdrop of",
+        f"In {charname}'s ",
+        "Amidst the surroundings of ",
+        # "Within the confines of",
+        f"Within {charname}'s ",
+        f"Inside {charname}'s ",
+        # f"Inside the confines of ",
+        f"Inside the confines of {charname}'s",
+        f"Set amongst the",
     ]
 
     return random.choice(variations)
 
 def fix_scenario_plan(scenario_plan, character):
-    charname = extract_name.extract_name(character)
+    charname = extract_name(character)
     if not ("Albert" in charname):
         if "Albert" in scenario_plan:
             print("Random Name was used instead of Albert")
         scenario_plan = scenario_plan.replace("Albert", random_name.random_name())
     return scenario_plan
 
-def create_character_info_generators(completion_mode=None,engine_wrapper=None,logging_level=None,use_filenames=False):
+def create_character_info_generators(completion_mode=None, LLM=None,logging_level=None,use_filenames=False):
+    
     character_card_plan_path = "create_character_card_plan_no_filenames"
+
     if use_filenames:
         character_card_plan_path = "create_character_card_plan"
         
@@ -1503,26 +1533,12 @@ def create_character_info_generators(completion_mode=None,engine_wrapper=None,lo
         re.IGNORECASE | re.DOTALL,
     )
 
-    try:
-        overrides = LLM['override_character_card_plan_presets']
-
-        if overrides['sampling_params'] is not None:
-            sampling_params = overrides['sampling_params']
-
-        if overrides['prompt'] is not None:
-            character_card_plan_path = overrides['prompt']
-    except KeyError:
-        logger.info(f"Overrides for ''")
-
     if completion_mode:
         character_card_plan_path = character_card_plan_path + ".txt"
     else:
         character_card_plan_path = character_card_plan_path + ".json"
 
-    character_card_plan_creator = GenerationStep(
-        prompt_path=character_card_plan_path,
-        regex = character_card_plan_regex,
-        sampling_params={
+    character_card_sampling_params={
         "max_tokens": 3000,
         "stop": [
             "### Response",
@@ -1540,32 +1556,40 @@ def create_character_info_generators(completion_mode=None,engine_wrapper=None,lo
         # top_k=-1,
         "top_p": 0.5,
         # min_p=0.4,
-        },
+    },
+
+    # Override the function's generation settings if overrides are present.
+    character_card_sampling_params, character_card_plan_path = override_presets(LLM, 'create_conversation', character_card_sampling_params, character_card_plan_path)
+
+    character_card_plan_creator = GenerationStep(
+        prompt_path=character_card_plan_path,
+        regex = character_card_plan_regex,
+        sampling_params=character_card_sampling_params,
         completion_mode=completion_mode,
         logging_level=logging_level,
         retries=1,
-        engine_wrapper=engine_wrapper,
-        prompt_folder=PROMPTS,
-        default_prompt_folder=DEFAULT_PROMPTS
+        engine_wrapper=LLM,
+        prompt_folder=folder_paths.get_prompts_directory(),
+        default_prompt_folder=folder_paths.get_default_prompts_directory()
     )
-    
+
     # Character card gen
-    
+
     character_card_path = "create_character_card_no_filenames"
     if use_filenames:
         character_card_path = "create_character_card"
-        
+
     character_card_regex = re.compile(
         r"Character card \(be creative, write at least 3 paragraphs for each dialogue line\):\n(.+)",
         re.IGNORECASE | re.DOTALL,
     )
-    
+
     if completion_mode:
         character_card_path = character_card_path + ".txt"
     else:
         character_card_path = character_card_path + ".json"
-    
-    if obj_conf["SYSTEM"]["COMPLETION_MODE"]:
+
+    if completion_mode:
         stop_list = [
             "### Response",
             "\n\n\n\n\n",
@@ -1588,22 +1612,26 @@ def create_character_info_generators(completion_mode=None,engine_wrapper=None,lo
             "[INST",
             "## Text",
         ]
-    
-    character_card_creator = GenerationStep(
-        prompt_path=character_card_path,
-        regex = character_card_regex,
-        sampling_params={
+
+    character_card_creator_sampling_params = {
         "max_tokens": 4000,
         "stop": stop_list,
         "temperature": 1,
         "top_p": 0.5,
-        },
+    }
+
+
+
+    character_card_creator = GenerationStep(
+        prompt_path=character_card_path,
+        regex = character_card_regex,
+        sampling_params=character_card_creator_sampling_params
         completion_mode=completion_mode,
         logging_level=logging_level,
         retries=1,
-        engine_wrapper=engine_wrapper,
-        prompt_folder=PROMPTS,
-        default_prompt_folder=DEFAULT_PROMPTS
+        engine_wrapper=LLM,
+        prompt_folder=folder_paths.get_prompts_directory(),
+        default_prompt_folder=folder_paths.get_default_prompts_directory()
     )
     
     # Scenario Plan Gen
@@ -1644,9 +1672,9 @@ def create_character_info_generators(completion_mode=None,engine_wrapper=None,lo
         completion_mode=completion_mode,
         logging_level=logging_level,
         retries=1,
-        engine_wrapper=engine_wrapper,
-        prompt_folder=PROMPTS,
-        default_prompt_folder=DEFAULT_PROMPTS
+        engine_wrapper=LLM,
+        prompt_folder=folder_paths.get_prompts_directory(),
+        default_prompt_folder=folder_paths.get_default_prompts_directory()
     )
     
     # Scenario Gen
@@ -1687,9 +1715,9 @@ def create_character_info_generators(completion_mode=None,engine_wrapper=None,lo
         completion_mode=completion_mode,
         logging_level=logging_level,
         retries=1,
-        engine_wrapper=engine_wrapper,
-        prompt_folder=PROMPTS,
-        default_prompt_folder=DEFAULT_PROMPTS
+        engine_wrapper=LLM,
+        prompt_folder=folder_paths.get_prompts_directory(),
+        default_prompt_folder=folder_paths.get_default_prompts_directory()
     )
     
     return character_card_plan_creator, character_card_creator, scenario_plan_creator, scenario_creator
@@ -1698,7 +1726,7 @@ def create_character_info_generators(completion_mode=None,engine_wrapper=None,lo
 async def create_info(
     idx,
     group,
-    engine_wrapper,
+    LLM,
     assistant_mode,
     multi_turn_convs_info,
     multi_turn_convs_info_dir,
@@ -1710,9 +1738,9 @@ async def create_info(
     # NOTE we set up all the generators up here so that we don't have to drill the args down like this is an old version of React
     # Instead we drill the generators down like it's an old version of React lol
     character_card_plan_creator, character_card_creator, scenario_plan_creator, scenario_creator = create_character_info_generators(
-        engine_wrapper=engine_wrapper, use_filenames=use_filenames, completion_mode=completion_mode, logging_level=logging_level
+        LLM=LLM, use_filenames=use_filenames, completion_mode=completion_mode, logging_level=logging_level
     )
-    
+
     # Resume normal control flow code
     all_permutations = list(itertools.permutations(group))
 
@@ -1728,7 +1756,11 @@ async def create_info(
         if not os.path.exists(file_path):
             try:
                 info = await make_multiturn_conversation_info(
-                    perm, assistant_mode=assistant_mode, character_card_plan_creator=character_card_plan_creator, character_card_creator=character_card_creator, scenario_plan_creator=scenario_plan_creator, scenario_creator=scenario_creator,
+                    perm, assistant_mode=assistant_mode, 
+                    character_card_plan_creator=character_card_plan_creator, 
+                    character_card_creator=character_card_creator, 
+                    scenario_plan_creator=scenario_plan_creator, 
+                    scenario_creator=scenario_creator,
                     completion_mode=completion_mode
                 )
 
@@ -1741,7 +1773,7 @@ async def create_info(
                 print("ERROR!!!!--!!!!", e)
                 traceback.print_exc()
         else:
-            print(f"Skipped generating {file_path} as it already exists")
+            print(f"Skipped generating '{file_path}' as it already exists")
 
     multi_turn_convs_info.append(group_convs_info)
 
@@ -1770,13 +1802,12 @@ def read_json_files_info(directory):
     return tuple_list
 
 
-
+# TODO Make sure the overrides actually work. These nested functions are hard to follow.
 async def create_conversation(
     idx, info, LLM, multi_turn_convs, multi_turn_convs_dir, assistant_mode=False, completion_mode=None, logging_level=logging.INFO
 ):
     file_path = os.path.join(multi_turn_convs_dir, f"conv_{idx}.json")
     multi_turn_conversation_prompt_path = "multi_turn_conversation"
-    engine_wrapper = LLM['llm']
 
     if completion_mode:
         multi_turn_conversation_prompt_path = PROMPT_DICT['multi_turn_conversation']
@@ -1806,25 +1837,15 @@ async def create_conversation(
             # "min_p": 0.6,
             }
 
-    try:
-        overrides = LLM['llm']
-    except KeyError:
-        logger.info("No overrides found for 'create_conversation' function. Using default settings.")
-    try:
-        sampling_params = overrides['sampling_params']
-    except KeyError:
-        logger.info("No sampling override found for 'create_conversation' function. Using default sampling settings.")
-    try:
-        prompt = overrides['prompt']
-    except KeyError:
-        logger.info("No prompt override found for 'create_conversation' function. Using default prompt.")
+    # Override the function's generation settings if overrides are present.
+    sampling_params, multi_turn_conversation_prompt_path = override_presets(LLM, 'multi_turn_conversation', sampling_params, multi_turn_conversation_prompt_path)
 
     qatuples = info[0]
     character = info[1]
     scenario = info[2]
     scenario_plan=info[3]
     
-    charname = extract_name.extract_name(character)
+    charname = extract_name(character)
     
     conversation_regex = re.compile(
         f"Conversation that answers the provided question \(be sure that you do not change the questions or answers themselves; {charname} will answer the questions, not ask them; the questions and answers provided should be copied word for word, and surrounded by compelling conversation\):\n(.+)",
@@ -1838,7 +1859,7 @@ async def create_conversation(
         sampling_params=sampling_params,
         completion_mode=completion_mode,
         retries=1,
-        engine_wrapper=engine_wrapper,
+        engine_wrapper=LLM,
         logging_level=logging_level,
         prompt_folder=folder_paths.get_prompts_directory(),
         default_prompt_folder=folder_paths.get_default_prompts_directory(),
@@ -1887,10 +1908,8 @@ def convert_directory_to_list(directory_path):
 
                     # Extract and process conversation
                     conversation, primary_char_desc = data[0], data[1]
-                    primary_char_name = extract_name.extract_name(primary_char_desc)
-                    dialogues = process_multiturn_functions.extract_conversation(
-                        conversation
-                    )
+                    primary_char_name = extract_name(primary_char_desc)
+                    dialogues = extract_conversation(conversation)
 
                     # Convert to simplified format
                     simplified_conversations = []
@@ -1910,18 +1929,18 @@ def convert_directory_to_list(directory_path):
                         )
 
     # Write the master list to a new .jsonl file
-    write_1 = obj_conf["PATH"]["OUTPUT"] + "/master_list.jsonl"
+    write_1 = folder_paths.get_output_directory() + "/master_list.jsonl"
     with open(write_1, "w") as file:
         for item in master_list:
             file.write(json.dumps(item) + "\n")
 
     # Write the simplified data to a different .jsonl file
-    write_2 = obj_conf["PATH"]["OUTPUT"] + "/simplified_data.jsonl"
+    write_2 = folder_paths.get_output_directory() + "/simplified_data.jsonl"
     with open(write_2, "w") as file:
         for item in simplified_list:
             file.write(json.dumps(item) + "\n")
 
-    print(
+    logger.info(
         f"Conversion complete. Master list written to {write_1}. Simplified data written to {write_2}."
     )
 
@@ -1951,7 +1970,7 @@ def convert_directory_and_process_conversations(directory_path):
                     print(f"File {filename} is not in the expected format.")
 
     # Write the master list to a new file
-    with open(obj_conf["PATH"]["OUTPUT"] + "/processed_master_list.json", "w") as file:
+    with open(folder_paths.get_output_directory() + "/processed_master_list.json", "w") as file:
         json.dump(master_list, file)
 
     logger.info("Conversion complete. The processed master list is written to 'processed_master_list.json'.")
@@ -1997,14 +2016,8 @@ async def make_async_api_call(prompt=None, sampling_parameters={}, url='http://1
                 return {"error": f"API call failed with status code: {response.status}"}
 
 
-
-
-import re
-
-# from .character_card_grammar import character_card_grammar
 from .format_qatuples import format_qatuples
-import string
-import random
+
 
 
 def extract_author_name(title):
@@ -2119,16 +2132,16 @@ class EngineWrapper:
         if "stop" not in sampling_params:
             sampling_params["stop"] = []
         
-        if self.mode == "llamacpp": # Due to the way augmentoolkit was set up within Comfy, this path should never be called.
+        if self.mode == "llamacpp": # Due to the way augmentoolkit was set up within Comfy, this path should never be called. But perhaps it should be???
             return await make_async_api_call(messages=messages, sampling_parameters=sampling_params)
 
         elif self.mode == "api":
-            if DEBUG_MODE:
+            if get_config("DEBUG_MODE"):
                 logger.info(f"\n\n\nMESSAGES\n\n\n{messages}\n")
 
             messages_cleaned = [{"role": message["role"], "content": message["content"].replace("\\n","\n")} for message in messages]
             
-            if DEBUG_MODE:
+            if get_config("DEBUG_MODE"):
                 logger.info(f"\n\n\nMESSAGES CLEANED\n\n\n{messages_cleaned}\n")
 
             completion = await self.client.chat.completions.create(
@@ -2144,19 +2157,12 @@ class EngineWrapper:
         else:
             raise Exception("Aphrodite not compatible with chat mode!")
 
-augmentoolkit.extract_name
-
-augmentoolkit.extract_question_answer
-
-augmentoolkit.format_qatuples
-
-augmentoolkit.format_qatuples_noquotes
 
 class GenerationStep:
     def __init__(self,
-                 prompt_path="", # relative to the Inputs directory. Now just a string! - KR
+                 prompt_path="", #Name of prompt txt file, relative to the Inputs directory. Now just a string! - KR
                  regex=re.compile(r'.*', re.DOTALL), # take whole completion
-                 sampling_params={ # Can be overriden with LLM['sampling_params']
+                 sampling_params={ # Can be overriden with override['sampling_params']
                      "temperature": 1,
                      "top_p": 1,
                      "max_tokens": 3000,
@@ -2171,11 +2177,11 @@ class GenerationStep:
                             "## Information",
                             "## Instruction",
                             "Name:",
-                        ]
-                    },
+                     ]
+                 },
                  completion_mode=True, # Chat vs completion mode
                  retries=0,
-                 engine_wrapper=None, # This is the LLM dictionary object LLM['llm']
+                 engine_wrapper=None, # This is the LLM dictionary object 'LLM'
                  logging_level=logging.INFO,  # Default logging level
                  output_processor=lambda x: x, # to ensure that control flow does not need to have decision code handling the outputs of the LLM, you can pass in a function to handle and modify the outputs (post regex) here. By default it's just the identity function and does nothing.
                  return_input_too=True, 
@@ -2197,34 +2203,41 @@ class GenerationStep:
         self.default_prompt_folder = default_prompt_folder
         logging.basicConfig(level=self.logging_level, format='%(asctime)s - %(levelname)s - %(message)s')
 
-    
+
     async def generate(self,arguments={}):
 
         try:
             # Current file directory
-            current_dir = os.path.dirname(os.path.abspath(__file__))
+            #current_dir = os.path.dirname(os.path.abspath(__file__))
 
             # Dynamic INPUT_DIRECTORY path
-            ideal_path = os.path.join(current_dir, '..', '..', self.prompt_folder,self.prompt_path)
-            if os.path.exists(ideal_path):
-                full_prompt_path = ideal_path
+            #ideal_path = os.path.join(current_dir, '..', '..', self.prompt_folder,self.prompt_path)
+            #if os.path.exists(ideal_path):
+            #    full_prompt_path = ideal_path
+            #else:
+            #    full_prompt_path = os.path.join(current_dir, '..', '..', self.default_prompt_folder,self.prompt_path)
+            if os.path.exists(folder_paths.get_prompts_directory()):
+                full_prompt_path = os.path.join(folder_paths.get_prompts_directory(), self.prompt_path)
             else:
-                full_prompt_path = os.path.join(current_dir, '..', '..', self.default_prompt_folder,self.prompt_path)
+                full_prompt_path = os.path.join(folder_paths.get_default_prompts_directory(), self.prompt_path)
 
-            if full_prompt_path.endswith(".json"): #JSON route. This is a slightly-modified version of augmentoolkit's original prompt import code.
-                with open(full_prompt_path, 'r') as pf:
-                    prompt = pf.read()
-                    # Code to ensure that interpolation works, but curly braces are still allowed in the input
-                    # 1. Escape all curly braces
-                    prompt_escaped = prompt.replace('{', '{{').replace('}', '}}')
-                    # 2. Unescape curly braces that are associated with input keys
-                    for key in arguments.keys():
-                        prompt_escaped = prompt_escaped.replace(f"{{{{{key}}}}}", f"{{{key}}}") # Somehow this works
-                    # 3. Format
-                    prompt_formatted = prompt_escaped.format(**arguments)
-            else: # The PROMPT_DICT route.
-                prompt_name = os.path.splitext(os.path.basename(full_prompt_path))[0] # Extract the prompt name from its file path.
-                prompt_formatted, _ = load_external_prompt_and_grammar(prompt_name, "dummy_grammar", arguments) # Load the prompt with its arguments filled in.
+            try:
+                if full_prompt_path.endswith(".json"): #JSON route. This is a slightly-modified version of augmentoolkit's original prompt import code.
+                    with open(full_prompt_path, 'r') as pf:
+                        prompt = pf.read()
+                        # Code to ensure that interpolation works, but curly braces are still allowed in the input
+                        # 1. Escape all curly braces
+                        prompt_escaped = prompt.replace('{', '{{').replace('}', '}}')
+                        # 2. Unescape curly braces that are associated with input keys
+                        for key in arguments.keys():
+                            prompt_escaped = prompt_escaped.replace(f"{{{{{key}}}}}", f"{{{key}}}") # Somehow this works
+                        # 3. Format
+                        prompt_formatted = prompt_escaped.format(**arguments)
+                else: # The PROMPT_DICT route, where the prompts are already loaded into ComfyUI.
+                    prompt_name = os.path.splitext(os.path.basename(full_prompt_path))[0] # Extract the prompt name from its file path.
+                    prompt_formatted, _ = load_external_prompt_and_grammar(prompt_name, "dummy_grammar", arguments) # Load the prompt with its arguments filled in.
+            except Exception: # Since override isn't file-based, we can use invalid path errors to signal the Generator to process self.prompt_path as a regular string.
+                prompt_formatted = format_external_text_like_f_string(self.prompt_path, arguments)
 
         except Exception as e:
             logger.exception(f"An exception occured when trying to load the prompt '{self.prompt_path}': {e}")
@@ -2240,7 +2253,7 @@ class GenerationStep:
                         return ret, prompt_formatted + filtered_response
                     return ret
                 except Exception as e:
-                    if DEBUG_MODE:
+                    if get_config("DEBUG_MODE"):
                         logger.error(f"Error in Generation Step: {e}")
                     try:
                         if not self.engine_wrapper['llm'].mode == "llamacpp":
@@ -2270,170 +2283,6 @@ class GenerationStep:
             raise Exception("Generation step failed -- too many retries!")
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-class EngineWrapper:
-    def __init__(self, model, 
-                 api_key=None, 
-                 base_url=None, 
-                 mode="api", # can be one of api, aphrodite, llama.cpp
-                 quantization="gptq", # only needed if using aphrodite mode
-                ):
-        if mode == "aphrodite":
-            engine_args = AsyncEngineArgs(
-                model=model,
-                quantization=quantization,
-                engine_use_ray=False,
-                disable_log_requests=True,
-                max_model_len=12000,
-                dtype="float16"
-            )
-            self.engine = AsyncAphrodite.from_engine_args(engine_args)
-        self.mode = mode
-        self.client = AsyncOpenAI(api_key=api_key, base_url=base_url)
-        self.model = model
-
-    async def submit_completion(self, prompt, sampling_params):  # Submit request and wait for it to stream back fully
-
-        if "temperature" not in sampling_params:
-            sampling_params["temperature"] = 1
-        if "top_p" not in sampling_params:
-            sampling_params["top_p"] = 1
-        if "max_tokens" not in sampling_params:
-            sampling_params["max_tokens"] = 3000
-        if "stop" not in sampling_params:
-            sampling_params["stop"] = []
-        if "n_predict" not in sampling_params and self.mode == "llamacpp":
-            sampling_params["n_predict"] = sampling_params["max_tokens"]
-
-        if DEBUG_MODE:
-            logger.info(f'\n\nSETTINGS DUMP\n\nmodel:{self.model}\nprompt:{prompt}\ntemperature:{sampling_params["temperature"]}\ntop_p:{sampling_params["top_p"]}\nmax_tokens:{sampling_params["max_tokens"]}\n')
-
-        if self.mode == "llamacpp": # Should never reach this route, as mode will never be set to this value.
-            return await make_async_api_call(prompt=prompt, sampling_parameters=sampling_params)
-        
-        if self.mode == "aphrodite":
-            aphrodite_sampling_params = SamplingParams(**sampling_params)
-            request_id = make_id()
-            outputs = []
-            final_output = None
-
-            async for request_output in self.engine.generate(
-                prompt, aphrodite_sampling_params, request_id
-            ):
-                outputs.append(request_output.outputs[0].text)
-                final_output = request_output
-
-            return final_output.prompt + final_output.outputs[0].text
-        
-        if self.mode == "api":
-            completion = await self.client.completions.create(
-                model=self.model,
-                prompt=prompt,
-                temperature=sampling_params["temperature"],
-                top_p=sampling_params["top_p"],
-                stop=sampling_params["stop"],
-                max_tokens=sampling_params["max_tokens"],
-            )
-            completion = completion.choices[0].text
-            return prompt + completion
-    
-    async def submit_chat(self, messages, sampling_params): 
-        # Submit request and wait for it to stream back fully
-        if "temperature" not in sampling_params:
-            sampling_params["temperature"] = 1
-        if "top_p" not in sampling_params:
-            sampling_params["top_p"] = 1
-        if "max_tokens" not in sampling_params:
-            sampling_params["max_tokens"] = 3000
-        if "stop" not in sampling_params:
-            sampling_params["stop"] = []
-        
-        if self.mode == "llamacpp":
-            return await make_async_api_call(messages=messages, sampling_parameters=sampling_params)
-        elif self.mode == "api":
-            
-            if DEBUG_MODE: # Input messages
-                logger.info(f"\nMESSAGES\n{messages}\n")
-
-            messages_cleaned = [{"role": message["role"], "content": message["content"].replace("\\n","\n")} for message in messages]
-
-            if DEBUG_MODE: # Output messages
-                logger.info(f"messages_cleaned\n{messages_cleaned}\n")
-
-            completion = await self.client.chat.completions.create(
-                model=self.model,
-                messages=messages_cleaned,
-                temperature=sampling_params["temperature"],
-                top_p=sampling_params["top_p"],
-                stop=sampling_params["stop"],
-                max_tokens=sampling_params["max_tokens"],
-            )
-            completion = completion.choices[0].message.content
-            return completion
-        else:
-            raise Exception("Aphrodite not compatible with chat mode!")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 # This is hard-coded into the node, but for async purposes, we'll keep this copy here.
 def identify_duplicates(
     tuples: List[Tuple[str, str, str, str]]
@@ -2461,6 +2310,14 @@ def identify_duplicates(
 
     return matching_questions + selected_from_duplicates
 
+augmentoolkit.extract_name
+
+augmentoolkit.extract_question_answer
+
+augmentoolkit.format_qatuples
+
+augmentoolkit.format_qatuples_noquotes
+
 augmentoolkit.has_sequential_chars
 
 augmentoolkit.extract_conversation
@@ -2484,10 +2341,15 @@ augmentoolkit.random_name
 augmentoolkit.strip_steps
 
 
+
+
+
+
+"""
+
 import yaml
 import os
 import uuid
-# This is in no way best practices, but all my prompts being searchable and separate files is a good way to make my life easier.
 import pkgutil
 import importlib
 import sys
@@ -2517,8 +2379,7 @@ def convert_files_in_directory(directory):
                 print(f'Converting {file_path} to UTF-8...')
                 convert_to_utf8(file_path)
 
-
-directory = folder_path
+directory = folder_paths.get_prompts_directory()
 convert_files_in_directory(directory)
 
 
@@ -2667,4 +2528,4 @@ limited_tasks_convwriting = [run_task_with_limit(task) for task in tasks]
 for future in tqdmasyncio.tqdm.as_completed(limited_tasks_convwriting):
     await future
 
-
+"""

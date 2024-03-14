@@ -1,0 +1,30 @@
+root ::= question-validation "\n" answer-validation "\n" critical-evaluation "\n" revised-qatuple
+
+question-validation ::= "### Question Context Validation" "\n" special-term-check-question text-and-author-specificity scope-and-precision
+
+special-term-check-question ::= "#### Special Term Context Check: Specifically check for use of the terms \"book\", \"text\", \"passage\", and \"excerpt\" without context about which specific thing is being discussed. " question-term-detail "\n"
+text-and-author-specificity ::= "#### Text and Author Specificity: " question-text-author-detail "\n"
+scope-and-precision ::= "#### Scope and Precision: " question-scope-detail "\n"
+
+answer-validation ::= "### Answer Context Validation:" "\n" special-term-check-answer specificity-and-clarity answer-only-context-issues
+
+special-term-check-answer ::= "#### Special Term Context Check: Specifically check for use of the terms \"book\", \"text\", \"passage\", and \"excerpt\" without context about which specific thing is being discussed. " answer-term-detail "\n"
+specificity-and-clarity ::= "#### Specificity and Clarity: " answer-specificity-detail "\n"
+answer-only-context-issues ::= "#### Answer-Only Context Issues: " answer-context-issue-detail "\n"
+
+critical-evaluation ::= "### Critical Evaluation and Final Judgment:" "\n" evaluation final-judgment
+
+evaluation ::= "#### Evaluation: " evaluation-detail "\n"
+final-judgment ::= "#### Final judgment: " judgment-detail "\n"
+
+revised-qatuple ::= "### Question Rewording (using text details as reference):" "\n" revised-question-answer
+
+question-term-detail ::= [^\n]+
+question-text-author-detail ::= [^\n]+
+question-scope-detail ::= [^\n]+
+answer-term-detail ::= [^\n]+
+answer-specificity-detail ::= [^\n]+
+answer-context-issue-detail ::= [^\n]+
+evaluation-detail ::= [^\n]+
+judgment-detail ::= ("Pass."|"Fail."|"Reword.")
+revised-question-answer ::= "Question: " [^\n]+ "\n" "Answer: " [^\n]+ "\n"

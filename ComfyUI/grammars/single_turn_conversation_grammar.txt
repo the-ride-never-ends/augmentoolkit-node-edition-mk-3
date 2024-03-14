@@ -1,0 +1,12 @@
+root ::= statement "\n\n" response "\n"
+
+statement ::= [^\n]+ ":" [^\n]+
+
+response ::= [^\n]+ ":" [^\n]+
+
+character-name ::= word ("-" word)*
+word ::= [A-Za-z]+
+
+character-name ::= word | word word | word word word | word word word word | word word word word word | word word word word word word
+
+dialogue-line ::= [^\n]+

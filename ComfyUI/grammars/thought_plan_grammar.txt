@@ -1,0 +1,3 @@
+root ::= step+ "\n"
+
+step ::= "Step " [0-9]?[0-9] ". " ("Realize" | "Recognize" | "Conclude" | "Recall" | "Remember" | "Formulate" | "Decompose" | "Break down" | "Break" | "Therefore, the answer is" | "The answer is" | "Realise" | "Calculate" | "Understand" | "Note" | "The plan will") [^\n]+ "\n"

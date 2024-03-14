@@ -1,0 +1,32 @@
+root ::= text-analysis answer-breakdown accuracy-check final-judgment
+
+text-analysis ::= "### Text Analysis:" "\n" identify-key-info categorize-info-type
+
+identify-key-info ::= "#### Identify Key Information: " text-info-detail "\n"
+categorize-info-type ::= "#### Categorize Information Type: " info-type-detail "\n\n"
+
+answer-breakdown ::= "### Answer Breakdown:" "\n" dissect-answer identify-answer-type
+
+dissect-answer ::= "#### Dissect the Answer: " answer-detail "\n"
+identify-answer-type ::= "#### Identify Answer Type: " answer-type-detail "\n\n"
+
+accuracy-check ::= "### Accuracy Check:" "\n" direct-comparison inference-and-contextual-alignment
+
+direct-comparison ::= "#### Direct Comparison for Factual Accuracy:\n" comparison-points
+comparison-points ::= bullet-point+
+bullet-point ::= "  - " comparison-point-detail "\n"
+inference-and-contextual-alignment ::= "#### Inference and Contextual Alignment: " contextual-alignment-detail "\n\n"
+
+final-judgment ::= "### Final Judgment:" "\n" comprehensive-assessment overall-accuracy-determination
+
+comprehensive-assessment ::= "#### Comprehensive Assessment: " assessment-detail "\n"
+overall-accuracy-determination ::= "#### Overall Accuracy Determination: " accuracy-detail "\n"
+
+text-info-detail ::= [^\n]+
+info-type-detail ::= [^\n]+
+answer-detail ::= [^\n]+
+answer-type-detail ::= [^\n]+
+comparison-point-detail ::= [^\n]+
+contextual-alignment-detail ::= [^\n]+
+assessment-detail ::= [^\n]+
+accuracy-detail ::= [^\n]+

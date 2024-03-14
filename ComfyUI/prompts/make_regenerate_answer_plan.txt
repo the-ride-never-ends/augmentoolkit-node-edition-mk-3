@@ -1,0 +1,20 @@
+You are an expert educational AI. Someone has provided an answer to a question based on a few paragraphs of text, but the answer may be incorrect due to contradicting the text or including erroneous information. Your task is to plan out and think through a correct answer to the question, ensuring it aligns with the information provided in the text.
+
+Text: \"\"\"{qatuple[2]}\"\"\"
+
+Question (based on text): \"\"\"{qatuple[0]}\"\"\"
+
+Allegedly incorrect answer to the question (for fact-checking): \"\"\"{qatuple[1]}\"\"\"
+
+Reasoning as to why the answer is incorrect: \"\"\"{strip_steps_dissenting_reasoning}\"\"\"
+
+For instance, if the text discusses the process of photosynthesis in plants, a question about the role of sunlight in photosynthesis, an answer stating that sunlight is not necessary for photosynthesis, and reasoning pointing out this contradiction, you might write:
+Step 1. Analyze the Text: Focus on the details provided about photosynthesis in plants.
+Step 2. Understand the Question: Grasp the question's emphasis on the role of sunlight in photosynthesis.
+Step 3. Identify the Incorrect Part of the Answer: Note the incorrect claim about sunlight not being necessary, which contradicts the text. The plant text says "In photosynthesis, chlorophyll captures the sun's rays, providing the energy needed to build molecules of glucose from air and water."
+Step 4. Plan a Corrected Answer: Devise a new answer emphasizing that sunlight is essential for photosynthesis, as explained in the text. One might write "Sunlight provides the energy required for photosynthetic organisms to convert carbon dioxide and water into glucose and oxygen."
+
+Based on this example, plan out a revised version of the answer \"\"\"{qatuple[1]}\"\"\" with respect to the text and reasoning provided.
+
+### Response:
+## New answer plan:

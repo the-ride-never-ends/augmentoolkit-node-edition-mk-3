@@ -1,0 +1,22 @@
+root ::= normalization-block core-components-block comparative-analysis-block criteria-block conclusion-block
+
+normalization-block ::= "## Normalization of Questions:\n" normalized-question+
+normalized-question ::= "- \"" content "\"\n  - Normalized: " content "\n"
+
+core-components-block ::= "## Identification of Core Components:\n### Subject Matter:\n" subject-matter+ "### Information Sought:\n" information-sought+
+subject-matter ::= "- Question " digit+ ": " content "\n"
+information-sought ::= "- Question " digit+ ": " content "\n"
+
+comparative-analysis-block ::= "## Comparative Analysis Across Questions:\n### Direct Comparison:\n" bullet-item+ "### Overlap in Core Components:\n" bullet-item+ "\n"
+
+criteria-block ::= "## Criteria for Duplication:\n### Exact Information Match:\n" content "### Negation of Minor Differences:\n" content "\n"
+
+conclusion-block ::= "## Conclusion and Labeling:\n" content "\n\n## Unique Questions: " unique-questions "\n"
+unique-questions ::= "[" digit+ (", " digit+)* "]"
+
+content ::= char+ # A sequence of characters representing content
+
+digit ::= [0-9] # Digits
+char ::= [^\n] # Any character except newline
+
+bullet-item ::= "- " content "\n"

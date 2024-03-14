@@ -1,61 +1,70 @@
 import os
+import sys
 import time
 import logging
-import custom_nodes
-from custom_nodes.logger import logger
-from custom_nodes.augmentoolkit import (
-    INPUT,
-    OUTPUT,
-    PROMPTS,
-    DEFAULT_PROMPTS,
-    )
 
+from logger import logger # custom logging presets.
+from program_configs import get_config
 
+# Define file extensions
+# TODO: These should be configs perhaps?
 supported_pt_extensions = set(['.ckpt', '.pt', '.bin', '.pth', '.safetensors'])
+supported_llm_extensions = set(['.ckpt', '.pt', '.bin', '.pth', '.safetensors', '.gguf', ''])
+supported_llm_grammar_extensions = set(['.json','.jsonl', '.txt',])
+supported_llm_tokenizer_extensions = set(['.json','.jsonl', '.txt',])
+supported_llm_prompt_extensions = set(['.json','.jsonl', '.txt',])
 
-folder_names_and_paths = {}
-
+# Note: all file paths are relative to the path of the folder_paths.py file
 base_path = os.path.dirname(os.path.realpath(__file__))
 models_dir = os.path.join(base_path, "models")
-folder_names_and_paths["checkpoints"] = ([os.path.join(models_dir, "checkpoints")], supported_pt_extensions)
-folder_names_and_paths["configs"] = ([os.path.join(models_dir, "configs")], [".yaml"])
 
-folder_names_and_paths["loras"] = ([os.path.join(models_dir, "loras")], supported_pt_extensions)
-folder_names_and_paths["vae"] = ([os.path.join(models_dir, "vae")], supported_pt_extensions)
-folder_names_and_paths["clip"] = ([os.path.join(models_dir, "clip")], supported_pt_extensions)
-folder_names_and_paths["unet"] = ([os.path.join(models_dir, "unet")], supported_pt_extensions)
-folder_names_and_paths["clip_vision"] = ([os.path.join(models_dir, "clip_vision")], supported_pt_extensions)
-folder_names_and_paths["style_models"] = ([os.path.join(models_dir, "style_models")], supported_pt_extensions)
-folder_names_and_paths["embeddings"] = ([os.path.join(models_dir, "embeddings")], supported_pt_extensions)
-folder_names_and_paths["diffusers"] = ([os.path.join(models_dir, "diffusers")], ["folder"])
-folder_names_and_paths["vae_approx"] = ([os.path.join(models_dir, "vae_approx")], supported_pt_extensions)
+folder_names_and_paths = {
+    "checkpoints": ([os.path.join(models_dir, "checkpoints")], supported_pt_extensions),
+    "configs": ([os.path.join(models_dir, "configs")], [".yaml"]),
+    "loras": ([os.path.join(models_dir, "loras")], supported_pt_extensions),
+    "vae": ([os.path.join(models_dir, "vae")], supported_pt_extensions),
+    "clip": ([os.path.join(models_dir, "clip")], supported_pt_extensions),
+    "unet": ([os.path.join(models_dir, "unet")], supported_pt_extensions),
+    "clip_vision": ([os.path.join(models_dir, "clip_vision")], supported_pt_extensions),
+    "style_models": ([os.path.join(models_dir, "style_models")], supported_pt_extensions),
+    "embeddings": ([os.path.join(models_dir, "embeddings")], supported_pt_extensions),
+    "diffusers": ([os.path.join(models_dir, "diffusers")], ["folder"]),
+    "vae_approx": ([os.path.join(models_dir, "vae_approx")], supported_pt_extensions),
+    "controlnet": ([os.path.join(models_dir, "controlnet"), os.path.join(models_dir, "t2i_adapter")], supported_pt_extensions),
+    "gligen": ([os.path.join(models_dir, "gligen")], supported_pt_extensions),
+    "upscale_models": ([os.path.join(models_dir, "upscale_models")], supported_pt_extensions),
+    "custom_nodes": ([os.path.join(base_path, "custom_nodes")], []),
+    "hypernetworks": ([os.path.join(models_dir, "hypernetworks")], supported_pt_extensions),
+    "classifiers": ([os.path.join(models_dir, "classifiers")], {""})
+}
 
-folder_names_and_paths["controlnet"] = ([os.path.join(models_dir, "controlnet"), os.path.join(models_dir, "t2i_adapter")], supported_pt_extensions)
-folder_names_and_paths["gligen"] = ([os.path.join(models_dir, "gligen")], supported_pt_extensions)
-
-folder_names_and_paths["upscale_models"] = ([os.path.join(models_dir, "upscale_models")], supported_pt_extensions)
-
-folder_names_and_paths["custom_nodes"] = ([os.path.join(base_path, "custom_nodes")], [])
-
-folder_names_and_paths["hypernetworks"] = ([os.path.join(models_dir, "hypernetworks")], supported_pt_extensions)
-
-folder_names_and_paths["classifiers"] = ([os.path.join(models_dir, "classifiers")], {""})
-
-
+# Output, Temp, Input, and User directories
 output_directory = os.path.join(os.path.dirname(os.path.realpath(__file__)), "output")
 temp_directory = os.path.join(os.path.dirname(os.path.realpath(__file__)), "temp")
 input_directory = os.path.join(os.path.dirname(os.path.realpath(__file__)), "input")
 user_directory = os.path.join(os.path.dirname(os.path.realpath(__file__)), "user")
 
-filename_list_cache = {}
+# LLM, grammar, prompts, and default prompts directories
+llm_directory = os.path.join(os.path.dirname(os.path.realpath(__file__)), "llm")
+grammars_directory = os.path.join(os.path.dirname(os.path.realpath(__file__)), "grammars")
+tokenizers_directory = os.path.join(os.path.dirname(os.path.realpath(__file__)), "tokenizers")
+prompts_directory = os.path.join(os.path.dirname(os.path.realpath(__file__)), "prompts")
+default_prompts_directory = prompts_directory
 
-# Let's keep these bits separate ###################################
 
-if not os.path.exists(input_directory):
-    try:
-        os.makedirs(input_directory)
-    except:
-        logger.exception("WARNING: Failed to create input directory.")
+def ensure_directory_exists(directory):
+    if not os.path.exists(directory):
+        try:
+            os.makedirs(directory)
+        except Exception as e:
+            logger.exception(f"ERROR: Failed to create '{directory}' directory.")
+            raise e
+
+ensure_directory_exists(output_directory)
+ensure_directory_exists(temp_directory)
+ensure_directory_exists(input_directory)
+ensure_directory_exists(user_directory)
+
 
 def set_output_directory(output_dir):
     global output_directory
@@ -81,65 +90,38 @@ def get_input_directory():
     global input_directory
     return input_directory
 
-# Define appropriate file extensions
-supported_llm_extensions = set(['.ckpt', '.pt', '.bin', '.pth', '.safetensors', '.gguf', ''])
-supported_llm_grammar_extensions = set(['.json','.jsonl', '.txt',])
-supported_llm_tokenizer_extensions = set(['.json','.jsonl', '.txt',])
-supported_llm_prompt_extensions = set(['.json','.jsonl', '.txt',])
 
-# Set the default directories
-llm_directory = os.path.join(os.path.dirname(os.path.realpath(__file__)), "llm")
-grammars_directory = os.path.join(os.path.dirname(os.path.realpath(__file__)), "grammars")
-tokenizers_directory = os.path.join(os.path.dirname(os.path.realpath(__file__)), "tokenizers")
-prompts_directory = os.path.join(os.path.dirname(os.path.realpath(__file__)), "prompts")
-default_prompts_directory = os.path.join(os.path.dirname(os.path.realpath(__file__)), "prompts")
-
-# Set the default extensions for the folder names and paths???
-if INPUT is not None: # Doesn't matter which global variable is here, so long as it's from the config.yaml file.
-    folder_names_and_paths["tokenizers"] = ([os.path.join(models_dir, "tokenizers")], supported_llm_tokenizer_extensions)
-    folder_names_and_paths["grammars"] = ([os.path.join(models_dir, "grammars")], supported_llm_grammar_extensions)
-    folder_names_and_paths["llm"] = ([os.path.join(models_dir, "llm")], supported_llm_extensions)
-    folder_names_and_paths["prompts"] = ([os.path.join(models_dir, "prompts")], supported_llm_prompt_extensions)
-    folder_names_and_paths["default_prompts"] = ([os.path.join(models_dir, "prompts")], supported_llm_prompt_extensions)
-else:
-    folder_names_and_paths["tokenizers"] = ([os.path.join(base_path, "tokenizers")], supported_llm_tokenizer_extensions)
-    folder_names_and_paths["grammars"] = ([os.path.join(base_path, "grammars")], supported_llm_grammar_extensions)
-    folder_names_and_paths["llm"] = ([os.path.join(models_dir, "llm")], supported_llm_extensions)
-    folder_names_and_paths["prompts"] = ([os.path.join(base_path, "prompts")], supported_llm_prompt_extensions)
-    folder_names_and_paths["default_prompts"] = ([os.path.join(base_path, "prompts")], supported_llm_prompt_extensions)
-
-
-# Change the prompts and default prompts folder paths after API and Aphrodite have been debugged.
-if PROMPTS is not None:
-    if PROMPTS != os.path.join(".","models","prompts"): # Use the folder_paths default if the config.yaml hasn't been changed.
+# TODO Change the prompts and default prompts folder paths after API and Aphrodite have been debugged.
+if get_config("PROMPTS") is not None:
+    if get_config("PROMPTS") != prompts_directory:  # Use the folder_paths default if the config.yaml hasn't been changed.
         try:
-            prompts_directory = PROMPTS
+            prompts_directory = get_config("PROMPTS")
             folder_names_and_paths["prompts"] = ([os.path.prompts_directory], supported_llm_prompt_extensions)
         except Exception as e:
             logger.exception("WARNING: Could not parse custom filepath for global variable 'PROMPTS' from 'config.yaml'. Defaulting to folder_paths.py presets.")
 
 
-if DEFAULT_PROMPTS is not None:
-    if DEFAULT_PROMPTS != os.path.join(".","models","prompts"): # Use the folder_paths default if the config.yaml hasn't been changed.
+if get_config("DEFAULT_PROMPTS") is not None:
+    if get_config("DEFAULT_PROMPTS") != default_prompts_directory: # Use the folder_paths default if the config.yaml hasn't been changed.
         try:
-            default_prompts_directory = DEFAULT_PROMPTS
+            default_prompts_directory = get_config("DEFAULT_PROMPTS")
             folder_names_and_paths["default_prompts"] = ([os.path.default_prompts_directory], supported_llm_prompt_extensions)
         except Exception as e:
             logger.exception("WARNING: Could not parse custom filepath for global variable 'DEFAULT_PROMPTS' from 'config.yaml'. Defaulting to folder_paths.py presets.")
 
 
-if INPUT is not None:
-    if INPUT != os.path.join(".", "input"): # Use the folder_paths default if the config.yaml hasn't been changed.
+if get_config("INPUT") is not None:
+    if get_config("INPUT") != input_directory: # Use the folder_paths default if the config.yaml hasn't been changed.
         try:
-            set_input_directory(INPUT)
+            set_input_directory(get_config("INPUT"))
         except Exception as e:
             logger.exception("WARNING: Could not parse custom filepath for global variable 'INPUT' from 'config.yaml'. Defaulting to folder_paths.py presets.")
 
 
-if OUTPUT is not None:
-    if OUTPUT != os.path.join(".", "output"): # Use the folder_paths default if the config.yaml hasn't been changed.
+if get_config("OUTPUT") is not None:
+    if get_config("OUTPUT") != output_directory: # Use the folder_paths default if the config.yaml hasn't been changed.
         try:
-            set_output_directory(OUTPUT)
+            set_output_directory(get_config("OUTPUT"))
         except Exception as e:
             logger.exception("WARNING: Could not parse custom filepath for global variable'OUTPUT' from 'config.yaml'. Defaulting to folder_paths.py presets.")
 
@@ -168,10 +150,6 @@ def get_prompts_directory():
     global prompts_directory
     return prompts_directory
 
-def get_default_prompts_directory():
-    global default_prompts_directory
-    return default_prompts_directory
-
 def set_raw_text_name(name):
     global raw_text_name
     raw_text_name = name
@@ -188,10 +166,10 @@ def get_loaded_llm_name():
     global loaded_llm_name
     return loaded_llm_name
 
+
+filename_list_cache = {}
+
 ###################################
-
-
-
 
 #NOTE: used in http server so don't put folders that should not be accessed remotely
 def get_directory_by_type(type_name):

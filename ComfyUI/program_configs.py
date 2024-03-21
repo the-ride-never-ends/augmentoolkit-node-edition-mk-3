@@ -1,13 +1,37 @@
 import os
+import uuid
 import yaml
-import logging
+
 from logger import logger
 
+"""
+if os.name == "posix":
+    try:
+        print("Augmentoolkit.py attempting to import Aphrodite-engine...")
+        from aphrodite import (
+            EngineArgs,
+            AphroditeEngine,
+            SamplingParams,
+            AsyncAphrodite,
+            AsyncEngineArgs,
+        )
+        APHRODITE_NOT_INSTALLED = False
+        print("aphrodite-engine import successful.")
+    except:
+        print("Aphrodite-engine not installed. Only Llama CPP or API modes will run.")
+        APHRODITE_NOT_INSTALLED = True
+"""
+
+def make_id():
+    return str(uuid.uuid4())
 
 # Define base paths and config path
 base_path = os.path.dirname(os.path.realpath(__file__))
-config_path = os.path.join(base_path, "config.yaml")
+config_path = os.path.join(base_path, "config.yml")
 
+########################################
+##### PROGRAM DEFAULTS AND CONFIGS #####
+########################################
 
 program_defaults = {
     "DEBUG_MODE": True, # Debug global. True by default
@@ -37,47 +61,46 @@ program_defaults = {
     "OUTPUT": os.path.join(base_path, "output"),
     "PROMPTS": os.path.join(base_path, "prompts"),
     "DEFAULT_PROMPTS": os.path.join(base_path, "prompts"),
-    "LOG_LEVEL": "Debug"
+    "LOG_LEVEL": "Debug",
 }
 
-
 def load_defaults_config(file_path: str):
-
     with open(file_path, 'r') as file:
         obj_conf = yaml.safe_load(file)
-
-        # Apply configs from YAML file
-        for key, value in obj_conf.items():
-            try: 
-                # Check if path modification is necessary
-                if key in ["INPUT", "OUTPUT", "DEFAULT_PROMPTS", "PROMPTS"] and os.name == "nt":
-                    value = value.replace("/", os.sep)
-                # Turn the configs into global variables.
-                globals()[key] = value 
-                print(f"Global variable '{key}' set to '{value}'")
-            except Exception as e:
-                print(f"WARNING: Could not find global variable '{key}' in 'config.yaml'. Defaulting to hardcoded global variable preset.")
-
+        # Iterate through the YAML configuration structure
+        for category, settings in obj_conf.items():
+            # Ensure settings is a dictionary before iterating
+            if isinstance(settings, dict):
+                for sub_key, value in settings.items():
+                    try:
+                        # Correctly apply the path modification condition
+                        if sub_key.upper() in ["INPUT", "OUTPUT", "DEFAULT_PROMPTS", "PROMPTS"] and os.name == "nt":
+                            value = value.replace("/", os.sep)
+                        # Set global variable
+                        globals()[sub_key] = value
+                        logger.info(f"Global variable '{sub_key}' set to '{value}'")
+                    except Exception as e:
+                        logger.exception(f"Could not set global variable '{sub_key}'. Error: {e}")
+            else:
+                logger.warning(f"Expected a dictionary of settings for '{category}', got {type(settings)} instead.")
 
 # Load the config file contents.
 try:
-    print("Loading global variable presets from 'config.yaml'...")
+    print("Loading global variable presets from 'config.yml'...")
     load_defaults_config(f'{config_path}')
-    print("'config.yaml' loaded.")
+    print("'config.yml' loaded successfully.")
 except Exception as e:
-    logger.exception(f"WARNING: Could not load 'config.yaml' file due to: {e}\n Defaulting to hardcoded global variable presets.\n")
-
+    logger.warning(f"Could not load 'config.yml' file due to: {e}\n Defaulting to hardcoded global variable presets.\n")
 
 def get_config(name: str):
     if name not in globals():
-        logger.warning(f"WARNING: Global variable '{name}' not found. Searching program defaults...")
+        logger.warning(f"Global variable '{name}' not found. Searching program defaults...")
         try:
             return globals().get(name, program_defaults[name])
         except:
-            logger.error(f"ERROR: Global variable '{name}' not found.")
+            logger.error(f"Global variable '{name}' not found.")
             raise ValueError(f"Global variable '{name}' not found.")
     return globals()[name]
-
 
 # Sample config yaml for augmentoolkit
 """

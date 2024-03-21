@@ -12,7 +12,6 @@ from datetime import datetime
 base_path = os.path.dirname(os.path.realpath(__file__))
 log_folder = os.path.join(base_path, "debug_logs")
 
-
 # Create the folder if it doesn't exist
 if not os.path.exists(log_folder):
     os.makedirs(log_folder)
@@ -21,7 +20,6 @@ if not os.path.exists(log_folder):
 logger = logging.getLogger("augmentoolkit_logger")
 logger.setLevel(logging.DEBUG)
 logger.propagate = False
-
 
 # Check if the logger already has handlers
 if not logger.handlers:

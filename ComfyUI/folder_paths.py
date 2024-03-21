@@ -38,17 +38,19 @@ folder_names_and_paths = {
     "classifiers": ([os.path.join(models_dir, "classifiers")], {""})
 }
 
+# Defaults
 # Output, Temp, Input, and User directories
-output_directory = os.path.join(os.path.dirname(os.path.realpath(__file__)), "output")
-temp_directory = os.path.join(os.path.dirname(os.path.realpath(__file__)), "temp")
-input_directory = os.path.join(os.path.dirname(os.path.realpath(__file__)), "input")
-user_directory = os.path.join(os.path.dirname(os.path.realpath(__file__)), "user")
+output_directory = os.path.join(base_path, "output")
+temp_directory = os.path.join(base_path, "temp")
+input_directory = os.path.join(base_path, "input")
+user_directory = os.path.join(base_path, "user")
 
+# Defaults
 # LLM, grammar, prompts, and default prompts directories
-llm_directory = os.path.join(os.path.dirname(os.path.realpath(__file__)), "llm")
-grammars_directory = os.path.join(os.path.dirname(os.path.realpath(__file__)), "grammars")
-tokenizers_directory = os.path.join(os.path.dirname(os.path.realpath(__file__)), "tokenizers")
-prompts_directory = os.path.join(os.path.dirname(os.path.realpath(__file__)), "prompts")
+llm_directory = os.path.join(base_path, "llm")
+grammars_directory = os.path.join(base_path, "grammars")
+tokenizers_directory = os.path.join(base_path, "tokenizers")
+prompts_directory = os.path.join(base_path, "prompts")
 default_prompts_directory = prompts_directory
 
 
@@ -64,7 +66,11 @@ ensure_directory_exists(output_directory)
 ensure_directory_exists(temp_directory)
 ensure_directory_exists(input_directory)
 ensure_directory_exists(user_directory)
-
+ensure_directory_exists(llm_directory)
+ensure_directory_exists(grammars_directory)
+ensure_directory_exists(tokenizers_directory)
+ensure_directory_exists(prompts_directory)
+ensure_directory_exists(default_prompts_directory)
 
 def set_output_directory(output_dir):
     global output_directory
@@ -94,36 +100,40 @@ def get_input_directory():
 # TODO Change the prompts and default prompts folder paths after API and Aphrodite have been debugged.
 if get_config("PROMPTS") is not None:
     if get_config("PROMPTS") != prompts_directory:  # Use the folder_paths default if the config.yaml hasn't been changed.
-        try:
-            prompts_directory = get_config("PROMPTS")
-            folder_names_and_paths["prompts"] = ([os.path.prompts_directory], supported_llm_prompt_extensions)
-        except Exception as e:
-            logger.exception("WARNING: Could not parse custom filepath for global variable 'PROMPTS' from 'config.yaml'. Defaulting to folder_paths.py presets.")
+        if get_config("DEFAULT_PROMPTS") != "./prompts":
+            try:
+                prompts_directory = get_config("PROMPTS")
+                folder_names_and_paths["prompts"] = ([prompts_directory], supported_llm_prompt_extensions)
+            except Exception as e:
+                logger.exception("WARNING: Could not parse custom filepath for global variable 'PROMPTS' from 'config.yml'. Defaulting to folder_paths.py presets.")
 
 
 if get_config("DEFAULT_PROMPTS") is not None:
     if get_config("DEFAULT_PROMPTS") != default_prompts_directory: # Use the folder_paths default if the config.yaml hasn't been changed.
-        try:
-            default_prompts_directory = get_config("DEFAULT_PROMPTS")
-            folder_names_and_paths["default_prompts"] = ([os.path.default_prompts_directory], supported_llm_prompt_extensions)
-        except Exception as e:
-            logger.exception("WARNING: Could not parse custom filepath for global variable 'DEFAULT_PROMPTS' from 'config.yaml'. Defaulting to folder_paths.py presets.")
+        if get_config("DEFAULT_PROMPTS") != "./prompts":
+            try:
+                default_prompts_directory = get_config("DEFAULT_PROMPTS")
+                folder_names_and_paths["default_prompts"] = ([default_prompts_directory], supported_llm_prompt_extensions)
+            except Exception as e:
+                logger.exception("WARNING: Could not parse custom filepath for global variable 'DEFAULT_PROMPTS' from 'config.yml'. Defaulting to folder_paths.py presets.")
 
 
 if get_config("INPUT") is not None:
     if get_config("INPUT") != input_directory: # Use the folder_paths default if the config.yaml hasn't been changed.
-        try:
-            set_input_directory(get_config("INPUT"))
-        except Exception as e:
-            logger.exception("WARNING: Could not parse custom filepath for global variable 'INPUT' from 'config.yaml'. Defaulting to folder_paths.py presets.")
+        if get_config("INPUT") != "./input":
+            try:
+                set_input_directory(get_config("INPUT"))
+            except Exception as e:
+                logger.exception("WARNING: Could not parse custom filepath for global variable 'INPUT' from 'config.yml'. Defaulting to folder_paths.py presets.")
 
 
 if get_config("OUTPUT") is not None:
     if get_config("OUTPUT") != output_directory: # Use the folder_paths default if the config.yaml hasn't been changed.
-        try:
-            set_output_directory(get_config("OUTPUT"))
-        except Exception as e:
-            logger.exception("WARNING: Could not parse custom filepath for global variable'OUTPUT' from 'config.yaml'. Defaulting to folder_paths.py presets.")
+        if get_config("OUTPUT") != "./output":
+            try:
+                set_output_directory(get_config("OUTPUT"))
+            except Exception as e:
+                logger.exception("WARNING: Could not parse custom filepath for global variable'OUTPUT' from 'config.yml'. Defaulting to folder_paths.py presets.")
 
 
 def get_default_prompts_directory():
@@ -166,8 +176,32 @@ def get_loaded_llm_name():
     global loaded_llm_name
     return loaded_llm_name
 
+# Hard code these for right now to stop all the erroring!
+folder_names_and_paths['prompts'] = ([os.path.join(base_path, "prompts")], supported_llm_prompt_extensions)
+folder_names_and_paths['default_prompts'] = ([os.path.join(base_path, "prompts")], supported_llm_prompt_extensions)
+folder_names_and_paths['grammars'] = ([os.path.join(base_path, "grammars")], supported_llm_grammar_extensions)
+folder_names_and_paths['llm'] = ([os.path.join(base_path, "llm")], supported_llm_extensions)
 
 filename_list_cache = {}
+
+def list_immediate_subfolders(folder_path):
+    """Lists all immediate subfolders under the specified folder.
+    
+    Args:
+        folder_path (str): The path to the folder whose subfolders are to be listed.
+    
+    Returns:
+        list: A list of the immediate subfolders under the specified folder.
+    """
+    # Get all entries in the folder
+    entries = os.listdir(folder_path)
+    
+    # Filter out the entries to include only directories
+    subfolders = [entry for entry in entries if os.path.isdir(os.path.join(folder_path, entry))]
+    
+    return subfolders
+
+
 
 ###################################
 

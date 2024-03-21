@@ -1,51 +1,29 @@
-import asyncio
-import glob
-from importlib.machinery import DEBUG_BYTECODE_SUFFIXES
-import inspect
-import itertools
-import json
-import logging
-import os
-import random
-import re
-import string
-import time
-import traceback
-import uuid
 
-from tqdm import asyncio as tqdmasyncio
-from tqdm import tqdm
-
-import nltk
-from nltk.tokenize import sent_tokenize
-from transformers import AutoTokenizer
-import matplotlib.pyplot as plt
-from collections import Counter
-from typing import List, Tuple
-from math import ceil
-from aphrodite import SamplingParams
-
-from custom_nodes import logger, augmentoolkit
-import folder_paths
+from logger import logger
 from program_configs import get_config
-
-from custom_nodes.logger import logger
-
-from custom_nodes.augmentoolkit import (
-    EngineWrapper, # Functions
-    extract_name, 
-    format_external_text_like_f_string,
-    format_qatuples,
-    limited_tasks,
-    load_external_prompt_and_grammar,
-    override_prompt_and_grammar,
-    run_task_with_limit,
-    special_instructions,
-    strip_steps,
-    write_output_to_file,
-)
+from engine import EngineWrapper
 
 
+# Note: This file is fairly sparse, as most of the backend for the API calls happens within the EngineWrapper from engine.py
+# TODO Test with other API services and front-ends (e.g. Ooba, Kobaldcpp)
+
+try:
+    print("augmentoolkit_api_functions.py attempting to import OpenAI api...")
+    import openai
+    OPENAI_NOT_INSTALLED = False  
+    print("Success!")
+except:
+    print("Note: OpenAI client not installed.")
+    OPENAI_NOT_INSTALLED = True
+
+try:
+    print("augmentoolkit_api_functions.py attempting to import TogetherAI api...")
+    import together
+    TOGETHER_NOT_INSTALLED = False
+    print("Success!")
+except:
+    logger.info("Note: Together.ai client not installed.")
+    TOGETHER_NOT_INSTALLED = True
 
 class ChatGPT:
     """
@@ -63,26 +41,25 @@ class ChatGPT:
             },
             "optional": {
                 "open_ai_api_key": ("STRING", {"default": None}),
-                "open_ai_api_base_url": ("STRING", {"default": None}),
+                #"open_ai_api_base_url": ("STRING", {"default": None}),
             }
         }
 
     RETURN_TYPES = ("LLM",)
     FUNCTION = "execute"
-    CATEGORY = "loaders/api"
+    CATEGORY = "augmentoolkit_functions/loaders"
 
-    def execute(self, model_name, open_ai_api_key, open_ai_api_base_url):
-        # Load the api key from the 'config.yaml' file if a custom key is not present
+    def execute(self, model_name, open_ai_api_key):
+        # Load the api key from the 'config.yml' file if a custom key is not present
         if open_ai_api_key is None:
             logger.info("'open_ai_api_key' argument not specified. Defaulting to API key from config.yaml.")
             try:
-                engine_wrapper = EngineWrapper(model=model_name, mode="api", api_key=get_config("API_KEY"), base_url=BASE_URL,)
+                engine_wrapper = EngineWrapper(model=model_name, mode="api", api_key=get_config("API_KEY"),)
                 config_list = [
                     {
                         'llm': engine_wrapper,
                         'type': 'api',
-                        'api_subtype': 'openai',
-                        'api_key': get_config("API_KEY"),
+                        'api_subtype': 'openai'
                     }
                 ]
             except Exception as e:
@@ -91,15 +68,14 @@ class ChatGPT:
                 raise e
         else:
             try:
-                engine_wrapper = EngineWrapper(model=model_name, mode="api", api_key=open_ai_api_key, base_url=open_ai_api_base_url,)
+                engine_wrapper = EngineWrapper(model=model_name, mode="api", api_key=open_ai_api_key,)
                 config_list = [
                     {
                         'llm': engine_wrapper,
                         'type': 'api',
                         'api_sub_type': 'openai',
-                        'api_key': open_ai_api_key,
                         'prompt': None,
-                        'sampling_params': None,
+                        'sampling_params': None
                     }
                 ]
             except Exception as e:
@@ -129,7 +105,7 @@ class LM_Studio:
 
     RETURN_TYPES = ("LLM",)
     FUNCTION = "execute"
-    CATEGORY = "loaders/api"
+    CATEGORY = "augmentoolkit_functions/loaders"
 
     def execute(self, model_name, api_key, api_base):
         try:
@@ -169,7 +145,7 @@ class Ollama:
 
     RETURN_TYPES = ("LLM",)
     FUNCTION = "execute"
-    CATEGORY = "loaders/api"
+    CATEGORY = "augmentoolkit_functions/loaders"
 
     def execute(self, model_name, api_type, api_base):
         try:
@@ -191,49 +167,28 @@ class Ollama:
 
         return ({"LLM": config_list},)
 
-
+"""
 class Mistral:
     pass
 
 
 class KobaldCpp:
     pass
-
+"""
 
 NODE_CLASS_MAPPINGS = {
     "ChatGPT": ChatGPT,
-    "KobaldCpp": KobaldCpp,
-    "Mistral": Mistral,
+    #"KobaldCpp": KobaldCpp,
+    #"Mistral": Mistral,
     "LM_Studio": LM_Studio,
     "Ollama": Ollama,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     "ChatGPT": "Load Model (OpenAI)",
-    "KobaldCpp": "Load Model (Kobald CPP)",
-    "Mistral": "Load Model (Mistral)",
+    #"KobaldCpp": "Load Model (Kobald CPP)",
+    #"Mistral": "Load Model (Mistral)",
     "LM_Studio": "Load Model (LM Studio)",
     "Ollama": "Load Model (Ollama)",
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 

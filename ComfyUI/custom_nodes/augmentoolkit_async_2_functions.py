@@ -1,3 +1,4 @@
+import aiohttp
 import asyncio
 import re
 import random
@@ -10,66 +11,187 @@ import itertools
 import glob
 import uuid
 from zoneinfo import InvalidTZPathWarning
-import yaml
-
-# Import global variables and functions.
-from augmentoolkit import (
-    CONCURRENCY_LIMIT,
-    COMPLETION_MODE,
-    DEBUG_MODE,
-    DOUBLE_CHECK_COUNTER,
-    PROMPT_DICT,
-    PROMPTS,
-    DEFAULT_PROMPTS,
-    OUTPUT,
-    load_external_prompt_and_grammar,
-    format_external_text_like_f_string,
-    write_output_to_file,
-    strip_steps,
-    random_name,
-    extract_name,
-    )
-
-
-import folder_paths
-from program_configs import get_config
-from logger import logger
 
 from math import ceil
 from typing import Any, List, Tuple, Union
-
 from tqdm import asyncio as tqdmasyncio
 from tqdm import tqdm
-import nltk
-from nltk.tokenize import sent_tokenize
-from transformers import AutoTokenizer
-
 import matplotlib.pyplot as plt
 from collections import Counter
 
+import folder_paths
+from program_configs import get_config
+from engine import GenerationStep
+from logger import logger
 
+# Import static functions.
 from custom_nodes.augmentoolkit import (
+    extract_name,
+    extract_steps,
+    extract_question_answer,
+    format_qatuples,
+    call_all_processors,
+    random_name,
+    select_random_capital,
+    special_instructions,
+    strip_steps,
+    write_output_to_file,
+)
+
+
+# Copy-pasted functions from augmentoolkit.py
+# I really need to refactor this code...
+
+def escape_unescaped_quotes(s):
+    # Initialize a new string to store the result
+    result = ""
+    # Iterate through the string, keeping track of whether the current character is preceded by a backslash
+    i = 0
+    while i < len(s):
+        # If the current character is a quote
+        if s[i] == '"':
+            # Check if it's the first character or if the preceding character is not a backslash
+            if i == 0 or s[i-1] != '\\':
+                # Add an escaped quote to the result
+                result += r'\"'
+            else:
+                # Add the quote as is, because it's already escaped
+                result += '"'
+        else:
+            # Add the current character to the result
+            result += s[i]
+        i += 1
+    return result
+
+
+def extract_capital_letters(input_string):
+    capital_letters = []
+    for char in input_string:
+        if char.isupper():
+            capital_letters.append(char)
+    return capital_letters
+
+
+def extract_conversation(conversation: str) -> str:
+    """
+    Extracts conversation from a string and returns it as a list of tuples.
+
+    Parameters:
+    conversation (str): A string representing the conversation.
+
+    Returns:
+    list of tuples: Each tuple contains the character's name and their message.
+    """
+    lines = conversation.strip().split("\n")
+    if len(lines) == 1: # If no newlines, there's 1 item
+        lines = conversation.replace("## Conversation that answers the provided questions:",'').strip().split(r"\n")[1:]
+    dialogues = []
+
+    for line in lines:
+        if ":" in line:
+            # Splitting at the first occurrence of ':'
+            parts = line.split(":", 1)
+            charname = parts[0].strip()
+            message = parts[1].strip() if len(parts) > 1 else ""
+            dialogues.append((charname, message))
+
+    return dialogues
+
+
+def extract_first_words(character_name: str, text: str):
+    # Regular expression pattern to extract first word after the character's name
+    pattern = fr"{character_name}: \"(\w+)"
+
+    # Find all matches in the text
+    matches = re.findall(pattern, text)
+
+    return matches
+
+
+def has_sequential_chars(string1: str, string2: str, n: int):
+    """
+    Check if any n sequential characters from string1 appear in string2.
+
+    Args:
+    string1 (str): The first string to check.
+    string2 (str): The second string in which to look for sequences.
+    n (int): The length of the sequence to check.
+
+    Returns:
+    bool: True if any n sequential characters from string1 are found in string2, False otherwise.
+    """
+
+    # Check if n is larger than the length of string1.
+    if n > len(string1):
+        return False, ""
+
+    # Iterate over string1 and check for each n-length substring in string2
+    comparison_string = ""
+
+    for i in range(len(string1) - n + 1):
+        comparison_string = string1[i : i + n]
+
+        if comparison_string in string2:
+            return True, comparison_string
+
+    return False, comparison_string
+
+def identify_duplicates(tuples: List[Tuple[str, str, str, str]], check_for_matching_subtrings_anywhere=False) -> List[Tuple[str, str, str, str]]:
+    # If you want to check for matching substrings anywhere, not just at start, use this code (untested)
+    if check_for_matching_subtrings_anywhere:
+        # Create a dictionary to hold questions with the same first N characters
+        question_dict = {}
+
+        # Iterate through each tuple and categorize them by the first N characters of the question
+        for q_tuple in tuples:
+            question = q_tuple[0]
+            placed = False
+
+            for dict_q in question_dict.keys():
+                if has_sequential_chars(question,dict_q,get_config("N_CHARACTERS_SAME")):
+                    question_dict[dict_q].append(q_tuple)
+                    placed = True
+                    break
+            if not placed:
+                question_dict[question] = [q_tuple] # if not found to be equivalent with anything, make it a dict entry so that things can be compared against it and added to its list
+
+            # Filter out prefixes that only have one question associated
+            matching_questions = [q for q_list in question_dict.values() if len(q_list) > 1 for q in q_list]
+
+            return matching_questions
+
+"""
+from custom_nodes.augmentoolkit import (
+    call_all_processors,
+    check_conversation_for_text_from_examples,
+    check_conversation_length,
+    check_each_question_contains_q_from_tuples,
+    check_for_repeated_dialogue_answers,
+    check_for_unintended_repeated_quotes,
+    compare_answers_with_qatuples,
     escape_unescaped_quotes,
     extract_capital_letters,
+    extract_conversation,
     extract_first_words,
     extract_name,
     extract_steps,
     extract_question_answer,
     format_qatuples,
+    format_qatuples_noquotes,
+    has_sequential_chars,
     identify_duplicates,
     process_multiturn_functions,
+    random_name,
     run_task_with_limit,
     select_random_capital,
-    special_instructions
+    special_instructions,
+    strip_steps,
+    write_output_to_file,
+    ChunkSentence
 )
-
-with open('./config.yaml', 'r') as file:
-    obj_conf = yaml.safe_load(file)
-
-
+"""
 
 def override_presets(LLM: dict, function_name: str, sampling_params: dict, prompt: str):
-
     try:
         override = LLM[f'override_{function_name}_presets']
 
@@ -96,11 +218,6 @@ def override_presets(LLM: dict, function_name: str, sampling_params: dict, promp
 def make_id():
     return str(uuid.uuid4())
 
-augmentoolkit.extract_steps
-
-augmentoolkit.extract_first_words
-
-augmentoolkit.write_output_to_file
 
 # multiturn helpers
 # These will probably be used for multiturn rapid-fire answering.
@@ -176,7 +293,7 @@ async def make_multiturn_character(
                 "special_instructions": instructions
             }
         )
-    write_output_to_file(card_plan_output, OUTPUT + "/multiturn_card_plan_generations", conv_id)
+    write_output_to_file(card_plan_output, get_config("OUTPUT") + "/multiturn_card_plan_generations", conv_id)
     
     starting_str = create_starting_str(qa_tuples)
     (
@@ -191,7 +308,7 @@ async def make_multiturn_character(
             "starting_str": starting_str
         }
     )  # creates a character card
-    write_output_to_file(char_output, OUTPUT + "/multiturn_card_generations", conv_id)
+    write_output_to_file(char_output, get_config("OUTPUT") + "/multiturn_card_generations", conv_id)
     return char, instructions
 
 
@@ -225,7 +342,7 @@ async def make_multiturn_scenario(
     
     plan = fix_scenario_plan(plan, character)
     write_output_to_file(
-        scenario_plan_output, OUTPUT + "/multiturn_scenario_plan_generations", conv_id
+        scenario_plan_output, get_config("OUTPUT") + "/multiturn_scenario_plan_generations", conv_id
     )
     
     variation = select_variation(character)
@@ -253,7 +370,7 @@ async def make_multiturn_scenario(
                 "selected_variation": variation
             }
         )
-    write_output_to_file(scenario_output, OUTPUT + "/multiturn_scenario_generations", conv_id)
+    write_output_to_file(scenario_output, get_config("OUTPUT") + "/multiturn_scenario_generations", conv_id)
     return scenario, plan
 
 
@@ -410,7 +527,7 @@ async def repair_qatuple_context(
             }
         )
         write_output_to_file(
-            revision_output, OUTPUT + "/question_context_revision_generations", revision_id
+            revision_output, get_config("OUTPUT") + "/question_context_revision_generations", revision_id
         )  # incidentally, identifying the problem and fixing it in the same step (without another planning step) works a lot better than identifying it and then trying to fix it in the next step.
         if isinstance(revision[0], str):  # if the thing was reworded
             vetted_qa_tuples[idx] = (revision[0], revision[1], tup[2], tup[3]) # replace the old tuple with the new one, revision doesn't have text name so we keep the old one
@@ -500,8 +617,8 @@ async def vet_answer_accuracy_loop(
         engine_wrapper=engine_wrapper,
         logging_level=logging_level,
         output_processor=parse_answer_accuracy_validation,
-        prompt_folder=PROMPTS,
-        default_prompt_folder=DEFAULT_PROMPTS
+        prompt_folder=folder_paths.get_prompts_directory(),
+        default_prompt_folder=folder_paths.get_default_prompts_directory()
     )
     
     # Resume normal control flow code
@@ -527,7 +644,7 @@ async def vet_answer_accuracy_loop(
                 }
             )
             write_output_to_file(
-                answer_accuracy_output, OUTPUT + "/check_answer_accuracy_generations", run_id
+                answer_accuracy_output, get_config("OUTPUT") + "/check_answer_accuracy_generations", run_id
             )
             if not judgement[0]:  # if not accurate
                 dissenting_reasoning = judgement[1]
@@ -563,7 +680,7 @@ async def vet_answer_accuracy_loop(
             )
             qtuple = (qtuple_partial[0],qtuple_partial[1],para,para_name)
             write_output_to_file(
-                generate_new_q_output, OUTPUT + "/regenerate_question_generations", run_id
+                generate_new_q_output, get_config("OUTPUT") + "/regenerate_question_generations", run_id
             )
             return await vet_question_loop(
                 qtuple,
@@ -646,8 +763,8 @@ async def vet_answer_relevance_loop(
         engine_wrapper=engine_wrapper,
         logging_level=logging_level,
         output_processor=parse_answer_relevancy_validation_step,
-        prompt_folder=PROMPTS,
-        default_prompt_folder=DEFAULT_PROMPTS
+        prompt_folder=get_config("PROMPTS"),
+        default_prompt_folder=get_config("DEFAULT_PROMPTS")
     )
     
     # Resume normal control flow code
@@ -672,7 +789,7 @@ async def vet_answer_relevance_loop(
                 }
             )
             write_output_to_file(
-                answer_relevancy_output, OUTPUT + "/check_answer_relevancy_generations", run_id
+                answer_relevancy_output, get_config("OUTPUT") + "/check_answer_relevancy_generations", run_id
             )
             if not judgement[0]:  # if not relevant
                 dissenting_reasoning = judgement[1]
@@ -717,7 +834,7 @@ async def vet_answer_relevance_loop(
             print(qtuple_partial)
             qtuple = (qtuple_partial[0],qtuple_partial[1],para,para_name)
             write_output_to_file(
-                generate_new_q_output, OUTPUT + "/regenerate_question_generations", run_id
+                generate_new_q_output, get_config("OUTPUT") + "/regenerate_question_generations", run_id
             )
             return await vet_question_loop(
                 qtuple,
@@ -800,8 +917,8 @@ async def vet_question_loop(
         engine_wrapper=engine_wrapper,
         logging_level=logging_level,
         output_processor=parse_validation_step,
-        prompt_folder=PROMPTS,
-        default_prompt_folder=DEFAULT_PROMPTS
+        prompt_folder=get_config("PROMPTS"),
+        default_prompt_folder=get_config("DEFAULT_PROMPTS")
     )
     
     # NOTE Set up generate new question step
@@ -840,8 +957,8 @@ async def vet_question_loop(
             engine_wrapper=engine_wrapper,
             logging_level=logging_level,
             output_processor=extract_question_from_response_completionmode,
-            prompt_folder=PROMPTS,
-        default_prompt_folder=DEFAULT_PROMPTS
+            prompt_folder=get_config("PROMPTS"),
+        default_prompt_folder=get_config("DEFAULT_PROMPTS")
         )
     else:
         new_q_generator = GenerationStep(
@@ -865,8 +982,8 @@ async def vet_question_loop(
             engine_wrapper=engine_wrapper,
             logging_level=logging_level,
             output_processor=extract_question_from_response_chatmode,
-            prompt_folder=PROMPTS,
-        default_prompt_folder=DEFAULT_PROMPTS
+            prompt_folder=get_config("PROMPTS"),
+        default_prompt_folder=get_config("DEFAULT_PROMPTS")
         )
     
     # Resume normal control flow code
@@ -894,7 +1011,7 @@ async def vet_question_loop(
                 # Now we need to put the judgement together into the format it expects it to be in
                 
                 write_output_to_file(
-                    check_q_output, OUTPUT + "/check_question_generations", run_id
+                    check_q_output, get_config("OUTPUT") + "/check_question_generations", run_id
                 )
                 if not judgement[0]:  # if not relevant
                     dissenting_reasoning = judgement[1]
@@ -945,7 +1062,7 @@ async def vet_question_loop(
                     qtuple = (qtuple_partial[0],qtuple_partial[1],para,para_name)
                     write_output_to_file(
                         generate_new_q_output,
-                        OUTPUT + "/regenerate_question_generations",
+                        get_config("OUTPUT") + "/regenerate_question_generations",
                         run_id,
                     )
                     print("New question: ", qtuple)
@@ -1111,8 +1228,8 @@ async def generate_qatuples_from_para(
         retries=0,
         engine_wrapper=engine_wrapper,
         logging_level=logging_level,
-        prompt_folder=get_config("PROMPTS"),
-        default_prompt_folder=DEFAULT_PROMPTS
+        prompt_folder=folder_paths.get_prompts_directory(),
+        default_prompt_folder=folder_paths.get_default_prompts_directory()
     )
     
     # NOTE Set up qatuple generation step #
@@ -1154,8 +1271,8 @@ async def generate_qatuples_from_para(
             engine_wrapper=engine_wrapper,
             logging_level=logging_level,
             output_processor=extract_questions_from_response_completionmode,
-            prompt_folder=get_config("PROMPTS"),
-        default_prompt_folder=DEFAULT_PROMPTS
+            prompt_folder=folder_paths.get_prompts_directory(),
+            default_prompt_folder=folder_paths.get_default_prompts_directory()
         )
     else:
         qatuples_generator = GenerationStep(
@@ -1182,8 +1299,8 @@ async def generate_qatuples_from_para(
             engine_wrapper=engine_wrapper,
             logging_level=logging_level,
             output_processor=extract_questions_from_response_chatmode,
-            prompt_folder=get_config("PROMPTS"),
-            default_prompt_folder=DEFAULT_PROMPTS
+            prompt_folder=folder_paths.get_prompts_directory(),
+            default_prompt_folder=folder_paths.get_default_prompts_directory()
         )
     # Resume normal control flow code
     try:
@@ -1211,7 +1328,7 @@ async def generate_qatuples_from_para(
             }
         )
         write_output_to_file(
-            questions_plan_output, OUTPUT + "/question_plan_generations", question_group_id
+            questions_plan_output, get_config("OUTPUT") + "/question_plan_generations", question_group_id
         )
         if get_config("DEBUG_MODE"):
             logger.inf(f"\n\n\nOUTER LOOP CALL GENERATE Q: {para}, \n\n idx: {idx} \n\n plan: {plan}")
@@ -1230,7 +1347,7 @@ async def generate_qatuples_from_para(
         question_answer_tuples_more_info = [(qatup[0],qatup[1],para[0],para[1]) for qatup in question_answer_tuples]
         write_output_to_file(
             question_generation_output,
-            OUTPUT + "/question_generation_generations",
+            get_config("OUTPUT") + "/question_generation_generations",
             question_group_id,
         )
         for qnum, question_answer_tuple in enumerate(question_answer_tuples_more_info):
@@ -1404,8 +1521,8 @@ async def filter_all_questions(
         logging_level=logging_level, # TODO change to warning
         output_processor=judge_paragraph_processor,
         return_input_too=False,
-        prompt_folder=get_config("PROMPTS"),
-        default_prompt_folder=get_config("DEFAULT_PROMPTS")
+        prompt_folder=folder_paths.get_prompts_directory(),
+        default_prompt_folder=folder_paths.get_default_prompts_directory()
     )
     if not take_subset:
         tasks = [
@@ -1434,11 +1551,6 @@ async def filter_all_questions(
         await future
 
 
-augmentoolkit.ChunkSentence.sentence_chunking_algorithm
-
-augmentoolkit.fix_text
-
-
 async def ensure_multiple_answers_are_same(
     info, conv, multi_turn_conv_generator,completion_mode=None
 ):  # why is this a whole separate function? Once upon a time, LLMs were used in validation here, too. But programmatic validation SEEMS to catch the common problems. This is here so that I can add it back in if I have to.
@@ -1446,7 +1558,7 @@ async def ensure_multiple_answers_are_same(
     retries = 0
     c = conv
     while retries < 2:  # try twice, since multiturn is an expensive operation
-        if process_multiturn_functions.call_all_processors(
+        if call_all_processors(
             c[0], info[0]
         ):  # if programmatic validation passes
             return c
@@ -1625,7 +1737,7 @@ def create_character_info_generators(completion_mode=None, LLM=None,logging_leve
     character_card_creator = GenerationStep(
         prompt_path=character_card_path,
         regex = character_card_regex,
-        sampling_params=character_card_creator_sampling_params
+        sampling_params=character_card_creator_sampling_params,
         completion_mode=completion_mode,
         logging_level=logging_level,
         retries=1,
@@ -1810,12 +1922,12 @@ async def create_conversation(
     multi_turn_conversation_prompt_path = "multi_turn_conversation"
 
     if completion_mode:
-        multi_turn_conversation_prompt_path = PROMPT_DICT['multi_turn_conversation']
+        multi_turn_conversation_prompt_path = get_config("PROMPT_DICT")['multi_turn_conversation']
     else:
         multi_turn_conversation_prompt_path = multi_turn_conversation_prompt_path + ".json"
         
     if assistant_mode:
-        multi_turn_conversation_prompt_path = PROMPT_DICT['multi_turn_conversation_assistant_mode']
+        multi_turn_conversation_prompt_path = get_config("PROMPT_DICT")['multi_turn_conversation_assistant_mode']
 
     sampling_params={
             "max_tokens": 8000,
@@ -1958,7 +2070,7 @@ def convert_directory_and_process_conversations(directory_path):
                     isinstance(item, (list, str)) for item in data
                 ):
                     # Extract and process the conversation part
-                    conversations = process_multiturn_functions.extract_conversation(
+                    conversations = extract_conversation(
                         data[0]
                     )
                     # Convert tuples back to the formatted string as required
@@ -1974,10 +2086,6 @@ def convert_directory_and_process_conversations(directory_path):
         json.dump(master_list, file)
 
     logger.info("Conversion complete. The processed master list is written to 'processed_master_list.json'.")
-
-
-
-augmentoolkit.escape_unescaped_quotes
 
 
 import aiohttp
@@ -2016,7 +2124,7 @@ async def make_async_api_call(prompt=None, sampling_parameters={}, url='http://1
                 return {"error": f"API call failed with status code: {response.status}"}
 
 
-from .format_qatuples import format_qatuples
+
 
 
 
@@ -2028,260 +2136,6 @@ def extract_author_name(title):
     else:
         author_name = [False]
     return author_name[0]  # first letter of Author name
-
-
-augmentoolkit.select_random_capital
-
-augmentoolkit.extract_capital_letters
-
-
-import asyncio
-import uuid
-from openai import AsyncOpenAI
-from augmentoolkit.generation_functions.async_llamacpp_api_call import make_async_api_call
-
-try:
-    from aphrodite import (
-        EngineArgs,
-        AphroditeEngine,
-        SamplingParams,
-        AsyncAphrodite,
-        AsyncEngineArgs,
-    )
-except:
-    print("Aphrodite not installed; stick to Llama CPP or API modes")
-
-def make_id():
-    return str(uuid.uuid4())
-
-
-class EngineWrapper:
-    def __init__(self, model, 
-                 api_key=None, 
-                 base_url=None, 
-                 mode="api", # can be one of api, aphrodite, llama.cpp
-                 quantization="gptq", # only needed if using aphrodite mode
-                ):
-        if mode == "aphrodite":
-            engine_args = AsyncEngineArgs(
-                model=model,
-                quantization=quantization,
-                engine_use_ray=False,
-                disable_log_requests=True,
-                max_model_len=12000,
-                dtype="float16"
-            )
-            self.engine = AsyncAphrodite.from_engine_args(engine_args)
-        self.mode = mode
-        self.client = AsyncOpenAI(api_key=api_key, base_url=base_url)
-        self.model = model
-
-    async def submit_completion(
-        self, prompt, sampling_params
-    ):  # Submit request and wait for it to stream back fully
-        if "temperature" not in sampling_params:
-            sampling_params["temperature"] = 1
-        if "top_p" not in sampling_params:
-            sampling_params["top_p"] = 1
-        if "max_tokens" not in sampling_params:
-            sampling_params["max_tokens"] = 3000
-        if "stop" not in sampling_params:
-            sampling_params["stop"] = []
-        if "n_predict" not in sampling_params and self.mode == "llamacpp":
-            sampling_params["n_predict"] = sampling_params["max_tokens"]
-
-        if self.mode == "llamacpp": # Due to the way augmentoolkit was set up within Comfy, this path should never be called.
-            return await make_async_api_call(prompt=prompt, sampling_parameters=sampling_params)
-        
-        if self.mode == "aphrodite":
-            aphrodite_sampling_params = SamplingParams(**sampling_params)
-            request_id = make_id()
-            outputs = []
-            # self.engine.add_request(request_id,prompt,sampling_params) #old sync code
-            final_output = None
-            async for request_output in self.engine.generate(
-                prompt, aphrodite_sampling_params, request_id
-            ):
-                outputs.append(request_output.outputs[0].text)
-                final_output = request_output
-
-            # full_output = "".join(outputs)
-            return final_output.prompt + final_output.outputs[0].text
-        
-        if self.mode == "api":
-            completion = await self.client.completions.create(
-                model=self.model,
-                prompt=prompt,
-                temperature=sampling_params["temperature"],
-                top_p=sampling_params["top_p"],
-                stop=sampling_params["stop"],
-                max_tokens=sampling_params["max_tokens"],
-            )
-            completion = completion.choices[0].text
-            return prompt + completion
-    
-    async def submit_chat(
-    self, messages, sampling_params
-    ):  # Submit request and wait for it to stream back fully
-        if "temperature" not in sampling_params:
-            sampling_params["temperature"] = 1
-        if "top_p" not in sampling_params:
-            sampling_params["top_p"] = 1
-        if "max_tokens" not in sampling_params:
-            sampling_params["max_tokens"] = 3000
-        if "stop" not in sampling_params:
-            sampling_params["stop"] = []
-        
-        if self.mode == "llamacpp": # Due to the way augmentoolkit was set up within Comfy, this path should never be called. But perhaps it should be???
-            return await make_async_api_call(messages=messages, sampling_parameters=sampling_params)
-
-        elif self.mode == "api":
-            if get_config("DEBUG_MODE"):
-                logger.info(f"\n\n\nMESSAGES\n\n\n{messages}\n")
-
-            messages_cleaned = [{"role": message["role"], "content": message["content"].replace("\\n","\n")} for message in messages]
-            
-            if get_config("DEBUG_MODE"):
-                logger.info(f"\n\n\nMESSAGES CLEANED\n\n\n{messages_cleaned}\n")
-
-            completion = await self.client.chat.completions.create(
-                model=self.model,
-                messages=messages_cleaned,
-                temperature=sampling_params["temperature"],
-                top_p=sampling_params["top_p"],
-                stop=sampling_params["stop"],
-                max_tokens=sampling_params["max_tokens"],
-            )
-            completion = completion.choices[0].message.content
-            return completion
-        else:
-            raise Exception("Aphrodite not compatible with chat mode!")
-
-
-class GenerationStep:
-    def __init__(self,
-                 prompt_path="", #Name of prompt txt file, relative to the Inputs directory. Now just a string! - KR
-                 regex=re.compile(r'.*', re.DOTALL), # take whole completion
-                 sampling_params={ # Can be overriden with override['sampling_params']
-                     "temperature": 1,
-                     "top_p": 1,
-                     "max_tokens": 3000,
-                     "stop": [
-                            "### Response",
-                            "\n\n\n\n\n",
-                            "</s>",
-                            "# Input:",
-                            "[INST]",
-                            "### Instruction",
-                            "### Information",
-                            "## Information",
-                            "## Instruction",
-                            "Name:",
-                     ]
-                 },
-                 completion_mode=True, # Chat vs completion mode
-                 retries=0,
-                 engine_wrapper=None, # This is the LLM dictionary object 'LLM'
-                 logging_level=logging.INFO,  # Default logging level
-                 output_processor=lambda x: x, # to ensure that control flow does not need to have decision code handling the outputs of the LLM, you can pass in a function to handle and modify the outputs (post regex) here. By default it's just the identity function and does nothing.
-                 return_input_too=True, 
-                 default_prompt_folder="prompts",
-                 prompt_folder="prompts"
-                ):
-        self.prompt_path = prompt_path
-        self.regex = regex
-        self.sampling_params = sampling_params
-        self.completion_mode = completion_mode
-        self.retries = retries
-        self.logging_level = logging_level
-        self.output_processor = output_processor
-        self.return_input_too = return_input_too
-        if not engine_wrapper:
-            raise Exception("Engine wrapper not passed in!")
-        self.engine_wrapper = engine_wrapper 
-        self.prompt_folder = prompt_folder
-        self.default_prompt_folder = default_prompt_folder
-        logging.basicConfig(level=self.logging_level, format='%(asctime)s - %(levelname)s - %(message)s')
-
-
-    async def generate(self,arguments={}):
-
-        try:
-            # Current file directory
-            #current_dir = os.path.dirname(os.path.abspath(__file__))
-
-            # Dynamic INPUT_DIRECTORY path
-            #ideal_path = os.path.join(current_dir, '..', '..', self.prompt_folder,self.prompt_path)
-            #if os.path.exists(ideal_path):
-            #    full_prompt_path = ideal_path
-            #else:
-            #    full_prompt_path = os.path.join(current_dir, '..', '..', self.default_prompt_folder,self.prompt_path)
-            if os.path.exists(folder_paths.get_prompts_directory()):
-                full_prompt_path = os.path.join(folder_paths.get_prompts_directory(), self.prompt_path)
-            else:
-                full_prompt_path = os.path.join(folder_paths.get_default_prompts_directory(), self.prompt_path)
-
-            try:
-                if full_prompt_path.endswith(".json"): #JSON route. This is a slightly-modified version of augmentoolkit's original prompt import code.
-                    with open(full_prompt_path, 'r') as pf:
-                        prompt = pf.read()
-                        # Code to ensure that interpolation works, but curly braces are still allowed in the input
-                        # 1. Escape all curly braces
-                        prompt_escaped = prompt.replace('{', '{{').replace('}', '}}')
-                        # 2. Unescape curly braces that are associated with input keys
-                        for key in arguments.keys():
-                            prompt_escaped = prompt_escaped.replace(f"{{{{{key}}}}}", f"{{{key}}}") # Somehow this works
-                        # 3. Format
-                        prompt_formatted = prompt_escaped.format(**arguments)
-                else: # The PROMPT_DICT route, where the prompts are already loaded into ComfyUI.
-                    prompt_name = os.path.splitext(os.path.basename(full_prompt_path))[0] # Extract the prompt name from its file path.
-                    prompt_formatted, _ = load_external_prompt_and_grammar(prompt_name, "dummy_grammar", arguments) # Load the prompt with its arguments filled in.
-            except Exception: # Since override isn't file-based, we can use invalid path errors to signal the Generator to process self.prompt_path as a regular string.
-                prompt_formatted = format_external_text_like_f_string(self.prompt_path, arguments)
-
-        except Exception as e:
-            logger.exception(f"An exception occured when trying to load the prompt '{self.prompt_path}': {e}")
-
-        times_tried = 0
-        if self.completion_mode:
-            while times_tried <= self.retries:
-                try:
-                    response = await self.engine_wrapper['llm'].submit_completion(prompt_formatted, self.sampling_params)
-                    filtered_response = re.search(self.regex, response).group(1)
-                    ret = self.output_processor(filtered_response)
-                    if self.return_input_too:
-                        return ret, prompt_formatted + filtered_response
-                    return ret
-                except Exception as e:
-                    if get_config("DEBUG_MODE"):
-                        logger.error(f"Error in Generation Step: {e}")
-                    try:
-                        if not self.engine_wrapper['llm'].mode == "llamacpp":
-                            print("Response:")
-                            print(response)
-                    except:
-                        pass
-                    traceback.print_exc()
-                    times_tried += 1
-            raise Exception("Generation step failed -- too many retries!")
-        else:
-            while times_tried <= self.retries:
-                try:
-                    messages = json.loads(prompt_formatted)
-                    response = await self.engine_wrapper['llm'].submit_chat(messages, self.sampling_params)
-                    filtered_response = response.replace('"','\\"').replace("\n","\\n")
-                    ret = self.output_processor(filtered_response)
-                    if self.return_input_too:
-                        return ret, json.dumps(messages + [{"role": "assistant", "content": filtered_response}])
-                    return ret
-                except Exception as e:
-                    logger.error(f"Error in Generation Step: {e}")
-                    logger.info(prompt_formatted)
-                    logger.error(f"Above prompt resulted in error, probably the model's fault: {e}")
-                    traceback.print_exc()
-                    times_tried += 1
-            raise Exception("Generation step failed -- too many retries!")
-
 
 # This is hard-coded into the node, but for async purposes, we'll keep this copy here.
 def identify_duplicates(
@@ -2310,43 +2164,8 @@ def identify_duplicates(
 
     return matching_questions + selected_from_duplicates
 
-augmentoolkit.extract_name
-
-augmentoolkit.extract_question_answer
-
-augmentoolkit.format_qatuples
-
-augmentoolkit.format_qatuples_noquotes
-
-augmentoolkit.has_sequential_chars
-
-augmentoolkit.extract_conversation
-
-augmentoolkit.compare_answers_with_qatuples
-
-augmentoolkit.check_for_repeated_dialogue_answers
-
-augmentoolkit.check_conversation_length
-
-augmentoolkit.check_conversation_for_text_from_examples
-
-augmentoolkit.check_each_question_contains_q_from_tuples
-
-augmentoolkit.check_for_unintended_repeated_quotes
-
-augmentoolkit.call_all_processors
-
-augmentoolkit.random_name
-
-augmentoolkit.strip_steps
-
-
-
-
-
 
 """
-
 import yaml
 import os
 import uuid

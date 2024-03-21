@@ -1,10 +1,6 @@
-import ast
-import aiohttp
 import asyncio
-from email.utils import formataddr
 import glob
 import io
-import importlib
 import inspect
 import itertools
 import json
@@ -12,54 +8,48 @@ import logging
 import os
 import random
 import re
-#import sentiencepiece
-import sys
-
-from numpy.random import f
-from scipy import rand
-import string
 import time
-import torch
-import traceback
+#import sentiencepiece
+import string
+import sys
 import uuid
-import yaml
+
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 
 script_dir = os.path.dirname(os.path.realpath(__file__))
-custom_nodes_path = os.path.join(script_dir, "..", "custom_nodes")
+custom_nodes_path = os.path.join(script_dir, ".." "custom_nodes")
 sys.path.insert(0, custom_nodes_path)
 
-import accelerate
 from accelerate.utils import release_memory
 from collections import Counter
-from collections.abc import Callable, Awaitable
-from datetime import datetime
+from collections.abc import Callable
 from functools import partial, wraps
 from llama_cpp import Llama, LlamaGrammar
 from math import ceil
+from numpy.random import f, rand
 from tqdm import asyncio as tqdmasyncio
 from tqdm import tqdm
 from transformers import AutoTokenizer
-from transformers.models.deberta.modeling_deberta import DebertaLayerNorm
 from typing import Any, List, Tuple, Union
 
 import nltk
 nltk.download("punkt")
 from nltk.tokenize import sent_tokenize
 
-import comfy.utils
-import comfy.model_management
 from comfy.cli_args import args
+import custom_nodes.augmentoolkit_async_2_functions as aug_async
 
-from custom_nodes.logger import logger
-import custom_nodes.augmentoolkit_async_functions
-import custom_nodes.augmentoolkit_async_2_functions # TODO Change to "augmentoolkit_async_functions" when testing is complete.
-import custom_nodes.augmentoolkit_api_functions
-from custom_nodes.grammars import Grammars
+script_dir = os.path.dirname(os.path.realpath(__file__))
+custom_nodes_path = os.path.join(script_dir, "..", "custom_nodes")
+sys.path.insert(0, custom_nodes_path)
 
 import folder_paths
+from logger import logger
 from program_configs import get_config
+from engine import EngineWrapper, format_external_text_like_f_string, load_external_prompt_and_grammar
+
+# TODO Change to "augmentoolkit_async_functions" when testing is complete.
 
 # Try to import all packages for the Aphrodite and API nodes.
 if os.name == "nt":
@@ -68,31 +58,15 @@ if os.name == "nt":
 
 if os.name == "posix":
     try:
-        print("Attempting to import Aphrodite-engine...")
+        print("augmentoolkit.py attempting to import Aphrodite-engine...")
         from aphrodite import (
-            EngineArgs,
-            AphroditeEngine,
             SamplingParams,
-            AsyncAphrodite,
-            AsyncEngineArgs,
         )
+        APHRODITE_NOT_INSTALLED = False
+        print("Success!")
     except:
         print("Aphrodite-engine not installed. Only Llama CPP or API modes will run.")
         APHRODITE_NOT_INSTALLED = True
-
-try:
-    print("Attempting to import OpenAI api...")
-    import openai
-except:
-    print("Note: OpenAI client not installed.")
-    OPENAI_NOT_INSTALLED = True
-
-try:
-    print("Attempting to import TogetherAI api...")
-    import together
-except:
-    logger.info("Note: Together.ai client not installed.")
-    TOGETHER_NOT_INSTALLED = True
 
 #########################################
 ############ AUGMENTOOLKIT ##############
@@ -107,7 +81,6 @@ except:
 
 #TODO Finish refactoring LLM nodes so that they all can accept llama-cpp setting, prompt, and grammar overrides.
 #TODO Make these functions async so that this can run aphrodite.
-#TODO External API nodes. Maybe NodeGPT's can be repurposed?
 #TODO Linux in general. MacOS eventually.
 
 ################################################################
@@ -142,49 +115,6 @@ NAMES = [ # Replaces "Albert" in scenarios. Needs to be western male names to av
     "Nicholas",
     "Samuel",
 ]
-
-
-
-
-#########################################
-#### PROMPT AND GRAMMAR DICTIONARIES ####
-#########################################
-
-# Create dictionaries for the prompts and grammars from the txt files in the prompts and grammars folders. 
-# The prompt names from the dictionary must match the name of the function they go to.
-
-PROMPT_DICT = {}
-for file_name in folder_paths.get_filename_list("prompts"):
-    try:
-        file_path = folder_paths.get_full_path("prompts", file_name)
-        with open(file_path, 'r', encoding='utf-8') as file:
-            key = os.path.splitext(file_name)[0]
-            PROMPT_DICT[key] = file.read()
-    except Exception as e:
-        logger.exception(f"An Exception occured when creating the prompt dictionary object: {e} ")
-        raise e
-
-# Load the default prompts into the PROMPT_DICT object
-for file_name in folder_paths.get_filename_list("default_prompts"):
-    try:
-        file_path = folder_paths.get_full_path("default_prompts", file_name)
-        with open(file_path, 'r', encoding='utf-8') as file:
-            key = os.path.splitext(file_name)[0]
-            PROMPT_DICT['default_prompts'][key] = file.read()
-    except Exception as e:
-        logger.exception(f"An Exception occured when creating the default_prompts in the prompt dictionary object: {e} ")
-        raise e
-
-GRAMMAR_DICT = {}
-for file_name in folder_paths.get_filename_list("grammars"):
-    try:
-        file_path = folder_paths.get_full_path("grammars", file_name)
-        with open(file_path, 'r', encoding='utf-8') as file:
-            key = os.path.splitext(file_name)[0]
-            GRAMMAR_DICT[key] = file.read()
-    except Exception as e:
-        logger.exception(f"An Exception occured when creating the grammar dictionary object: {e} ")
-        raise e
 
 #########################################
 ######### ASYNC HELPER FUNCTIONS ########
@@ -235,6 +165,7 @@ def log_arguments(func: Callable):
         return func(*args, **kwargs)
     return wrapper
 
+
 # Conditional decorator function for log arguments.
 # Allows it be controlled via DEBUG_MODE global variable.
 def conditional_log_arguments(func: Callable):
@@ -243,12 +174,14 @@ def conditional_log_arguments(func: Callable):
     else:
         return func
 
+
 def extract_capital_letters(input_string):
     capital_letters = []
     for char in input_string:
         if char.isupper():
             capital_letters.append(char)
     return capital_letters
+
 
 def select_random_capital(exclusions):
     # Create a list of capital letters excluding the ones in the exclusions list
@@ -260,6 +193,7 @@ def select_random_capital(exclusions):
     else:
         return "No available capital letters to choose from"
 
+
 def extract_first_words(character_name: str, text: str):
     # Regular expression pattern to extract first word after the character's name
     pattern = fr"{character_name}: \"(\w+)"
@@ -268,6 +202,7 @@ def extract_first_words(character_name: str, text: str):
     matches = re.findall(pattern, text)
 
     return matches
+
 
 def extract_name(str: str):
     # Regular expression to match 'Name:' followed by any characters until the end of the line
@@ -291,6 +226,7 @@ def extract_name(str: str):
             name = match.group(1)
             logger.info(f"Extracted name: {name}")
             return name
+
 
 # For the reword step (ONLY USE IF JUDGEMENT IS REWORD, OTHERWISE WE JUST IGNORE THE LAST BIT OF THE GEN)
 def extract_question_answer(response: str):
@@ -331,32 +267,6 @@ def extract_steps(text: str, steps=[2, 4, 5]):
     return extracted_text
 
 
-# IMPORTANT FUNCTION: Do not change lightly as it's used by a fuck-ton of different functions.
-# TODO: Test to see if function calls actually work inside this.
-def format_external_text_like_f_string(external_text: str, prompt_content: str) -> str:
-    # Define the regex replacement pattern. This pattern corresponds to the curly brace arguments in traditional f-strings.
-    # These placeholders are expected to be in curly braces {} and can include 
-    # alphanumeric characters, underscores, numeric indices in square brackets, or function calls.
-    pattern = r'{([a-zA-Z0-9_]+(\[[0-9]+\]){0,2}|\w+\(\))}'
-    #pattern = r'{([a-zA-Z0-9_]+(\[[0-9]+\])?|\w+\(\))}'
-
-    def replacer(match):
-        placeholder = match.group(1)
-
-        try:
-            # Replace the placeholder with the associated dictionary values from prompt_content, then return it as a string.
-            value = eval(placeholder, {}, prompt_content)
-            return str(value)
-        except (KeyError, IndexError, TypeError, SyntaxError, NameError) as e:
-            logger.exception(f"An Exception occured in format_external_text_like_f_string function using original placeholder {placeholder}: {e}")
-            print("Returning the original placeholder unmodified.")
-            return match.group(0)
-
-    # Apply the replacer function to the external text. 
-    # Note that external_text can be ANY text we want to treat as an f-string, not just text outside of Python. 
-    # This allows the function to be applied to strings within Python as well, such as those in dictionaries and lists.
-    return re.sub(pattern, replacer, external_text)
-
 def format_qatuples(qatuples: Tuple):
     strlst = []
     for qatuple in qatuples:
@@ -365,6 +275,7 @@ def format_qatuples(qatuples: Tuple):
 Answer: \"\"\"{qatuple[1]}\"\"\""""
         )
     return "\n\n".join(strlst)
+
 
 def format_qatuples_noquotes(qatuples: Tuple):
     strlst = []
@@ -394,64 +305,11 @@ def escape_unescaped_quotes(s):
         i += 1
     return result
 
-
-# IMPORTANT FUNCTION: Do not change lightly as it's used by everything that relies on LLM generations.
-# Note: The grammar files for this need to be cleaned of comments and extraneous text before importing.
-# Otherwise, the grammar will fail to load and cause the program to hang.
-def load_external_prompt_and_grammar(function_name:str , grammar_name: str, prompt_content: dict) -> Union[str, str]:
-
-    # Format the function and grammar names as strings, if they're not ones already.
-    grammar_name = str(grammar_name)
-    function_name = str(function_name)
-
-    print(f"Loading prompt and grammar for '{function_name}' function...")
-
-    # Load the prompt and the grammar.
-    try:
-        prompt = format_external_text_like_f_string(PROMPT_DICT[f'{function_name}'], prompt_content) # Since we're importing the prompts from txt files, we can't use the regular f-string feature.
-        print(f"Prompt for '{function_name}' funtion loaded successfully.")
-    except Exception as e:
-        logger.exception(f"An Exception occurred in '{function_name}' function while trying to import its prompt: {e}.")
-        print(f"Check the prompt folder. The prompt must be a txt file named '{function_name}', and the prompt text must contain {list(prompt_content.keys())} somewhere in curly brackets.")
-        logger.warning("WARNING: Specified prompt failed to load. Loading default prompt...")
-
-        # Load the default prompt if we can't load the specified one.
-        try:
-            prompt = format_external_text_like_f_string(PROMPT_DICT['default_prompts'][f'{function_name}'], prompt_content)
-        except Exception as e:
-            logger.exception(f"An Exception occurred in '{function_name}' function while trying to import its default prompt: {e}.")
-            logger.error(f"ERROR: 'load_external_prompt_and_grammar' function failed in '{function_name}' function as it could not import its prompt and default prompt.")
-            raise e
-            
-    try:
-        # Redirect stdout and stderr to suppress output from LlamaGrammar.from_string()
-        # Otherwise, it prints the entire grammar to the console and makes the debug logs a lot longer than they need to be.
-        original_stdout = sys.stdout
-        original_stderr = sys.stderr
-        sys.stdout = io.StringIO()
-        sys.stderr = io.StringIO()
-
-        grammar = LlamaGrammar.from_string(fr"{GRAMMAR_DICT[f'{grammar_name}']}")
-
-        # Restore stdout and stderr after the grammar is loaded.
-        sys.stdout = original_stdout
-        sys.stderr = original_stderr
-        print(f"Grammar for {function_name} loaded successfully.")
-
-    except Exception as e:
-        # Restore stdout and stderr in case of an exception before logging/handling the exception
-        sys.stdout = original_stdout
-        sys.stderr = original_stderr
-
-        logger.exception(f"An Exception occurred in '{function_name}' function while trying to import its grammar: {e}")
-        print(f"Check the grammar folder. The grammar must be a txt file named '{grammar_name}'.")
-
-    return prompt, grammar
-
 def make_id() -> str:
     return str(uuid.uuid4())
 
 # Note: This function has been largely depricated due to redundancy.
+"""
 def override_prompt_and_grammar(function_name: str, override_prompt=None, override_grammar=None, prompt_content=None) -> Union[str, str]:
 
     # Make sure the function name is a string, if it isn't already one.
@@ -518,7 +376,7 @@ def override_prompt_and_grammar(function_name: str, override_prompt=None, overri
          logger.exception(f"An Exception occurred in 'override_prompt_and_grammar' function: {e}")
 
     return prompt, grammar
-
+"""
 
 def random_name():
     return random.choice(NAMES)
@@ -1017,7 +875,7 @@ class ReviseQATuples:
     RETURN_NAMES = ("vetted_qa_tuples",)
     FUNCTION = "revise_qa_tuples"
 
-    CATEGORY = "output_generation"
+    CATEGORY = "augmentoolkit_functions"
 
     def revise_qa_tuples(self, vetted_qa_tuples, LLM, qatuple_directory_name,override_check_qatuple_context_presets=None):
         # Check for and fix the common mistake: mentioning "the text".
@@ -1117,18 +975,18 @@ class ReviseQATuples:
                     except Exception as e:
                         logger.exception(f"An Exception occurred in revise_qa_tuples in class ReviseQATuples: {e}")
             # TODO Figure out which augmentoolkit code to use here.
-            elif LLM['type'] == 'aphrodite' and : # Aphrodite route.
+            elif LLM['type'] == 'aphrodite' and APHRODITE_NOT_INSTALLED is False: # Aphrodite route.
                 #old_tuples = vetted_qa_tuples.copy()
 
                 # Set up tasks list before running asyncio
-                tasks = [augmentoolkit_async_2_functions.generate_qatuples_from_para(
+                tasks = [aug_async.generate_qatuples_from_para(
                     idx,
                     para,
                     engine_wrapper=LLM,
                     vetted_qa_tuples=vetted_qa_tuples,
                     qa_tuples_dir=qatuples_revised_directory,
-                    double_check_counter=DOUBLE_CHECK_COUNTER,
-                    use_filenames=USE_FILENAMES) for idx, para in enumerate(vetted_qa_tuples)
+                    double_check_counter=get_config("DOUBLE_CHECK_COUNTER"),
+                    use_filenames=get_config("USE_FILENAMES")) for idx, para in enumerate(vetted_qa_tuples)
                  ]
 
                 limited_tasks_qgen = [run_task_with_limit(task) for task in tasks]
@@ -1139,14 +997,14 @@ class ReviseQATuples:
 
             elif LLM['type'] == 'api': #API route.
                 # Set up tasks list before running asyncio
-                tasks = [augmentoolkit_async_2_functions.generate_qatuples_from_para(
+                tasks = [aug_async.generate_qatuples_from_para(
                     idx,
                     para,
                     engine_wrapper=LLM,
                     vetted_qa_tuples=vetted_qa_tuples,
                     qa_tuples_dir=qatuples_revised_directory,
-                    double_check_counter=DOUBLE_CHECK_COUNTER,
-                    use_filenames=USE_FILENAMES) for idx, para in enumerate(vetted_qa_tuples)
+                    double_check_counter=get_config("DOUBLE_CHECK_COUNTER"),
+                    use_filenames=get_config("USE_FILENAMES")) for idx, para in enumerate(vetted_qa_tuples)
                  ]
 
                 limited_tasks_qgen = [run_task_with_limit(task) for task in tasks]
@@ -1595,7 +1453,8 @@ def generate_new_question(qatuple: Tuple, LLM: dict):
 
     return questions, completion
 
-def generate_qa_tuples(LLM: dict, qa_tuple_directory_name: str, 
+def generate_qa_tuples(LLM: dict, 
+                       qa_tuple_directory_name: str, 
                        question_plan_directory_name: str, 
                        question_plan_generations_directory_name: str,
                        total_retries: int, 
@@ -1691,13 +1550,13 @@ def generate_qa_tuples(LLM: dict, qa_tuple_directory_name: str,
 
         elif LLM['type'] == 'aphrodite':
             # Create a list of tasks.
-            tasks = [augmentoolkit_async_2_functions.generate_qatuples_from_para(
+            tasks = [aug_async.generate_qatuples_from_para(
                 idx,
                 para,
                 engine_wrapper=LLM['llm'],
                 vetted_qa_tuples=vetted_qa_tuples,
                 qa_tuples_dir=qa_tuples_dir,
-                double_check_counter=DOUBLE_CHECK_COUNTER) for idx,para in enumerate(filtered_worthy_for_questions)
+                double_check_counter=get_config("DOUBLE_CHECK_COUNTER")) for idx,para in enumerate(filtered_worthy_for_questions)
             ] # Schedule all the tasks. See the documentation in augmentoolkit_async_functions.py for more information.
             asyncio.run(run_tasks(tasks))
 
@@ -1948,7 +1807,7 @@ def vet_answer_accuracy_loop(qa_tuple: Tuple, total_retries: int, LLM: dict, run
         times_checked = 0
         dissenting_reasoning = ""
 
-        while times_checked < DOUBLE_CHECK_COUNTER: # What the hell is this?
+        while times_checked < get_config("DOUBLE_CHECK_COUNTER"): # What the hell is this?
             logger.info(f"\n\nACCURACY CALL CHECK ANSWER: \nqtuple: {qtuple[0]} \ncontext: {qtuple[2]}, retries: {total_retries}, dissenting reasoning: {dissenting_reasoning}\n\n")
 
             judgement, answer_accuracy_output = check_answer(qtuple, LLM)
@@ -1960,13 +1819,13 @@ def vet_answer_accuracy_loop(qa_tuple: Tuple, total_retries: int, LLM: dict, run
                 passed_checks += 1
 
             times_checked += 1
-            if passed_checks >= ceil(DOUBLE_CHECK_COUNTER / 2):
+            if passed_checks >= ceil(get_config("DOUBLE_CHECK_COUNTER") / 2):
                 break
             failed_checks = times_checked - passed_checks
-            if failed_checks >= ceil(DOUBLE_CHECK_COUNTER / 2):
+            if failed_checks >= ceil(get_config("DOUBLE_CHECK_COUNTER") / 2):
                 break
 
-        if passed_checks >= ceil(DOUBLE_CHECK_COUNTER / 2):  # if question checks passed
+        if passed_checks >= ceil(get_config("DOUBLE_CHECK_COUNTER") / 2):  # if question checks passed
             logger.info(f"\n\nANSWER ACCURACY CHECKS PASSED \nretries: {total_retries}\n\n")
             return qtuple
         else:
@@ -1994,7 +1853,7 @@ def vet_answer_relevance_loop(qa_tuple: Tuple, LLM: dict, total_retries: int, ru
         times_checked = 0
         dissenting_reasoning = ""
 
-        while times_checked < DOUBLE_CHECK_COUNTER:
+        while times_checked < get_config("DOUBLE_CHECK_COUNTER"):
             logger.info(f"\n\nRELEVANCE CALL CHECK ANSWER: \nqtuple: {qtuple[0]} \ncontext: {qtuple[2]} \nretries: {total_retries} \ndissenting reasoning: {dissenting_reasoning}\n\n")
 
             judgement, answer_relevancy_output = check_answer_relevancy_with_text(qtuple, LLM)
@@ -2006,15 +1865,15 @@ def vet_answer_relevance_loop(qa_tuple: Tuple, LLM: dict, total_retries: int, ru
                 passed_checks += 1
             times_checked += 1
 
-            if passed_checks >= ceil(DOUBLE_CHECK_COUNTER / 2):
+            if passed_checks >= ceil(get_config("DOUBLE_CHECK_COUNTER") / 2):
                 break
 
             failed_checks = times_checked - passed_checks
 
-            if failed_checks >= ceil(DOUBLE_CHECK_COUNTER / 2):
+            if failed_checks >= ceil(get_config("DOUBLE_CHECK_COUNTER") / 2):
                 break
 
-        if passed_checks >= ceil(DOUBLE_CHECK_COUNTER / 2):
+        if passed_checks >= ceil(get_config("DOUBLE_CHECK_COUNTER") / 2):
             logger.info(f"\n\nRELEVANCE CHECKS PASSED\n\n")
 
             return vet_answer_accuracy_loop(qtuple, total_retries, LLM, run_id)
@@ -2045,7 +1904,7 @@ def vet_question_loop(qa_tuple: Tuple, LLM: dict, total_retries: int, run_id=Non
             times_checked = 0
             dissenting_reasoning = ""
 
-            while times_checked < DOUBLE_CHECK_COUNTER:
+            while times_checked < get_config("DOUBLE_CHECK_COUNTER"):
                 logger.info(f"\n\nQUESTION CALL CHECK ANSWER: \n{qtuple[0]}\ncontext: {qtuple[2]}\nretries: {total_retries} \ndissenting reasoning: {dissenting_reasoning}\n\n")
 
                 judgement, check_q_output = check_question(qtuple, LLM)
@@ -2057,13 +1916,13 @@ def vet_question_loop(qa_tuple: Tuple, LLM: dict, total_retries: int, run_id=Non
                     passed_checks += 1
 
                 times_checked += 1
-                if passed_checks >= ceil(DOUBLE_CHECK_COUNTER / 2):
+                if passed_checks >= ceil(get_config("DOUBLE_CHECK_COUNTER") / 2):
                     break
                 failed_checks = times_checked - passed_checks
-                if failed_checks >= ceil(DOUBLE_CHECK_COUNTER / 2):
+                if failed_checks >= ceil(get_config("DOUBLE_CHECK_COUNTER") / 2):
                     break
 
-            if passed_checks >= ceil(DOUBLE_CHECK_COUNTER / 2):  # if all question checks passed
+            if passed_checks >= ceil(get_config("DOUBLE_CHECK_COUNTER") / 2):  # if all question checks passed
                 logger.info(f"\n\nQUESTION CHECKS PASSED retries: {total_retries}")
                 return vet_answer_relevance_loop(qtuple, LLM, total_retries, run_id)
             else:
@@ -2110,9 +1969,9 @@ class GenerateQATuplesSimple: #TODO Write function documentation. This class wil
 
     FUNCTION = "return_generate_qa_tuples"
 
-    CATEGORY = "output_generation"
+    CATEGORY = "augmentoolkit_functions"
 
-    def return_generate_qa_tuples(self, LLM, qa_tuple_directory_name, question_plan_directory_name, question_plan_generations_directory_name, total_retries, filtered_worthy_for_questions=None):
+    def return_generate_qa_tuples(self, LLM, total_retries, filtered_worthy_for_questions=None):
         # Get the node starttime.
         node_start_time = time.time()
         
@@ -2181,7 +2040,7 @@ class GenerateQATuplesAdvanced:
 
     FUNCTION = "return_generate_qa_tuples"
 
-    CATEGORY = "output_generation"
+    CATEGORY = "augmentoolkit_functions/advanced"
 
     def return_generate_qa_tuples(self, LLM, 
                                   qa_tuple_directory_name, 
@@ -2274,7 +2133,7 @@ def make_multiturn_conversation(info, LLM: dict):
     conv, conv_output = multi_turn_conversation(
         info[0], info[1], info[2], info[3], 
         LLM, 
-        assistant_mode=ASSISTANT_MODE 
+        assistant_mode=get_config("ASSISTANT_MODE") 
     )  # based on what was originally: multi_turn_conversation(qa_tuples, character, scenario, scenario_plan, initialized_model)
 
     write_output_to_file(conv_output, "./multiturn_conversation_generations", info[4])
@@ -2581,8 +2440,10 @@ class MakeDatasetMultiturnConversationSimple: # TODO Write function documentatio
     :return None: The output of this class/node is the final dataset.
     """
     def __init__(self):
+        self.output_dir = folder_paths.get_output_directory()
         self.type = "output"
         self.prefix_append = ""
+        self.compress_level = 4
 
     @staticmethod
     def read_json_files_info(directory):
@@ -2624,7 +2485,6 @@ class MakeDatasetMultiturnConversationSimple: # TODO Write function documentatio
                 #"override_multi_turn_conversation_assistant_mode_presets": ("LLM",),
                 #"make_regenerate_answer_constrain_to_text_plan": ("LLM",),
             },
-            "hidden": {},
         }
     RETURN_TYPES = ()
     FUNCTION = "make_dataset_multi_turn_conversation"
@@ -2702,7 +2562,7 @@ class MakeDatasetMultiturnConversationSimple: # TODO Write function documentatio
 
         elif LLM['type'] == "aphrodite":
             tasks = [
-                augmentoolkit_async_2_functions.create_conversation(
+                aug_async.create_conversation(
                     idx,
                     info, 
                     LLM, 
@@ -2717,14 +2577,14 @@ class MakeDatasetMultiturnConversationSimple: # TODO Write function documentatio
 
             results.append({
                 "filename": f"conv_{idx}.json",
-                "size_of_dataset": len([f for f in os.listdir(f"{folder_paths.get_output_directory()}") if f.startswith("conv_") and f.endswith(".json")])
+                "size_of_dataset": len([f for f in os.listdir(f"{folder_paths.get_output_directory()}") if f.startswith("conv_") and f.endswith(".json")]),
                 "folder": file_path,
                 "type": self.type
             })
 
         elif LLM['type'] == "api":
             tasks = [
-                augmentoolkit_async_2_functions.create_conversation(
+                aug_async.create_conversation(
                     idx, 
                     info,
                     LLM, 
@@ -2825,7 +2685,7 @@ class ChunkParagraphs:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "raw_text": ("STRING",{"forceInput": True}),
+                "raw_text": ("RAW_TEXT",{"forceInput": True}),
                 "sentencepiece_tokenizer_name": ("STRING", {"default": 'Gryphe/MythoMax-L2-13b'}),
                 "max_token_length": ("INT", {"default": 400, "min": 15, "max": 10000, "step": 1}), # 15 is low-end for the average length of a sentence in English.
             }
@@ -2845,7 +2705,7 @@ class ChunkParagraphs:
                 tokenizer = AutoTokenizer.from_pretrained(fr"{sentencepiece_tokenizer_name}")
             else:
                 logger.error(f"ERROR: No sentencepiece tokenizer specified. Defaulting to 'Gryphe/MythoMax-L2-13b'")
-                tokenizer = AutoTokenizer.from_pretrained("Gryphe/MythoMax-L2-13b")
+                tokenizer = AutoTokenizer.from_pretrained("Gryphe/MythoMax-L2-13b") #Hardcode in the tokenizer is no tokenizer is specified by the user.
         except Exception as e:
             logger.exception(f"An Exception occured in return_clean_paragraphs function in class ChunkParagraphs when loading the tokenizer: {e}")
 
@@ -2893,11 +2753,11 @@ class ConvertDirectoryToList: # TODO Write function documentation.
 
     output_node = True
 
-    CATEGORY = "helper_function"
+    CATEGORY = "augmentoolkit_functions"
 
     def convert_directory_to_list(directory_path_arg: str):
         # Set up lists and paths.
-        directory_path = f"./{directory_path_arg}/"
+        directory_path = f"./ComfyUI/output/{directory_path_arg}/"
         master_list = []
         simplified_list = []
 
@@ -2975,6 +2835,8 @@ class DisplayOutputText: #TODO Write documentation for this function. And get it
         return {"ui": {"text": output_text}}
 
 
+# TODO Fix this class! And figure out what the hell 'lst' means.
+"""
 class FilterAndFlatten:
     @classmethod
     def INPUT_TYPES(s):
@@ -3014,6 +2876,9 @@ class FilterAndFlatten:
                 flat_list.extend(sublst[0])
 
         return(flat_list, {"ui": { "text": len(flat_list)}})
+"""
+
+
 
 #TODO Write documentation for this function.
 #TODO Make 
@@ -3032,8 +2897,8 @@ class FilterAndGraph:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "judged_worthy_for_questions": ("OUTPUT_TEXT", {"forceInput": True}),
-                "plot_paragraphs": (["True","False"]),
+                "judged_worthy_for_questions": ("TUPLE", {"forceInput": True}),
+                "plot_paragraphs": (["True","False"],),
             }
         }
 
@@ -3046,10 +2911,34 @@ class FilterAndGraph:
     def filter_and_graph(self, judged_worthy_for_questions, plot_paragraphs):
 
         filtered_worthy_for_questions = None
+        source_counts = Counter()
+        directory_path = os.path.join(self.output_dir,"worthy_for_questions")
 
-        try:
-            # Count the occurrences of None and non-None for each source text.
-            source_counts = Counter()
+        if judged_worthy_for_questions is None:
+            logger.info("'filtered_worthy_for_questions' variable is None! Reading in data from json folder...")
+            try:
+                for filename in os.listdir(directory_path):
+                # Open any json files in the folder and load their contents.
+                    if filename.endswith(".json"):
+                        filepath = os.path.join(directory_path, filename)
+
+                        with open(filepath, "r") as file:
+                            judged_worthy_for_questions = json.load(file)
+
+                            # Unpack the json file.
+                            paragraph = judged_worthy_for_questions['paragraph']
+                            source = judged_worthy_for_questions['metadata']
+
+                            # Count the occurrences of None and non-None for each source text.
+                            if paragraph is None:
+                                source_counts[source] = source_counts.get(source, [0, 0])
+                                source_counts[source][0] += 1
+                            else:
+                                source_counts[source] = source_counts.get(source, [0, 0])
+                                source_counts[source][1] += 1
+            except Exception as e:
+                logger.exception(f"An Exception occurred in filter_and_graph function under class FilterAndGraph while trying to load jsons from '{directory_path}': {e}")
+        else:
             for paragraph, source in judged_worthy_for_questions:
                 if paragraph is None:
                     source_counts[source] = source_counts.get(source, [0, 0])
@@ -3058,42 +2947,37 @@ class FilterAndGraph:
                     source_counts[source] = source_counts.get(source, [0, 0])
                     source_counts[source][1] += 1
 
-            # Prepare data for the graph.
-            labels = list(source_counts.keys())
-            none_counts = [source_counts[source][0] for source in labels]
-            logger.info(f"judged_worthy_for_questions none count: {none_counts}")
-            non_none_counts = [source_counts[source][1] for source in labels]
-            logger.info(f"judged_worthy_for_questions non-none count: {non_none_counts}")
+        # Prepare data for the graph.
+        labels = list(source_counts.keys())
+        none_counts = [source_counts[source][0] for source in labels]
+        logger.info(f"judged_worthy_for_questions none count: {none_counts}")
+        non_none_counts = [source_counts[source][1] for source in labels]
+        logger.info(f"judged_worthy_for_questions non-none count: {non_none_counts}")
 
-            file = f"paragraphs_suitability_{make_id()}.png"
+        file = f"paragraphs_suitability_{make_id()}.png"
 
-            # Plot the graph, then export it to outputs.
-            x = range(len(labels))
-            plt.bar(x, none_counts, width=0.4, label="Not suitable", align="center")
-            plt.bar(x, non_none_counts, width=0.4, label="Valid Paragraphs", align="edge")
-            plt.xlabel("Source Text")
-            plt.ylabel("Number of Paragraphs")
-            plt.title("Paragraphs Suitable for Questions by Source Text")
-            plt.xticks(x, labels, rotation="vertical")
-            plt.legend()
-            #plt.tight_layout() Comfy throws a warning and skips over this part of the graph.
-            plt.savefig(f"{self.output_dir}/{file}", dpi=300)
+        # Plot the graph, then export it to outputs.
+        x = range(len(labels))
+        plt.bar(x, none_counts, width=0.4, label="Not suitable", align="center")
+        plt.bar(x, non_none_counts, width=0.4, label="Valid Paragraphs", align="edge")
+        plt.xlabel("Source Text")
+        plt.ylabel("Number of Paragraphs")
+        plt.title("Paragraphs Suitable for Questions by Source Text")
+        plt.xticks(x, labels, rotation="vertical")
+        plt.legend()
+        #plt.tight_layout() Comfy throws a warning and skips over this part of the graph.
+        plt.savefig(f"{self.output_dir}/{file}", dpi=300)
 
-            paragraphs_suitability_plot = mpimg.imread(f"{self.output_dir}/{file}")
+        paragraphs_suitability_plot = mpimg.imread(f"{self.output_dir}/{file}")
 
-            # Filter out tuples with None and return the new list.
-            filtered_worthy_for_questions  = [t for t in judged_worthy_for_questions if t[0] is not None]
-            logger.info(f"filtered_worthy_for_questions: {filtered_worthy_for_questions[0]} : filtered_worthy_for_questions")
+        # Filter out tuples with None and return the new list.
+        filtered_worthy_for_questions  = [t for t in judged_worthy_for_questions if t[0] is not None]
+        logger.info(f"filtered_worthy_for_questions: {filtered_worthy_for_questions[0]} : filtered_worthy_for_questions")
 
-            if plot_paragraphs == "True":
-                return (filtered_worthy_for_questions, { "ui": {"paragraphs_suitability_plot": paragraphs_suitability_plot} })
-            else:
-                return (filtered_worthy_for_questions,)
-
-        except Exception as e:
-            logger.exception(f"An Exception occurred in filter_and_graph function under class FilterAndGraph: {e}")
-
-
+        if plot_paragraphs == "True":
+            return (filtered_worthy_for_questions, { "ui": {"paragraphs_suitability_plot": paragraphs_suitability_plot} })
+        else:
+            return (filtered_worthy_for_questions,)
 
 #This is NOT a terminal node, as the outputs of it could be useful for diagnostic purposes.
 class ConvertDirectoryAndProcessConversations: #TODO Maybe merge into class ConvertDirectoryToList as a separate function?
@@ -3109,7 +2993,7 @@ class ConvertDirectoryAndProcessConversations: #TODO Maybe merge into class Conv
     RETURN_TYPES = ("MASTER_OUTPUT_TEXT",)
     FUNCTION = "convert_directory_to_list"
 
-    CATEGORY = "helper_function"
+    CATEGORY = "augmentoolkit_functions"
 
     def convert_directory_to_list(self, directory_path_arg):
         directory_path = f"./{directory_path_arg}/"
@@ -3148,8 +3032,23 @@ class ConvertDirectoryAndProcessConversations: #TODO Maybe merge into class Conv
 
 # Wrapper for the async 'filter_all_questions' function, since the main class function is not async.
 # TODO Change augmentoolkit_async_2_functions to augmentoolkit_async_functions when testing is complete.
-async def await_filter_all_questions(paragraphs_processed, judged_worthy_for_questions, LLM: dict, output_dir: str, USE_SUBSET: bool):
-    return await augmentoolkit_async_2_functions.filter_all_questions(paragraphs_processed, judged_worthy_for_questions, LLM, output_dir, USE_SUBSET)
+async def await_filter_all_questions(paragraphs_processed,
+                                     judged_worthy_for_questions, 
+                                     LLM: dict, 
+                                     output_dir: str, 
+                                     USE_SUBSET: bool, 
+                                     use_filenames=None, 
+                                     rtwl=run_task_with_limit):
+    return await aug_async.filter_all_questions(paragraphs_processed, 
+                                                judged_worthy_for_questions, 
+                                                LLM, 
+                                                output_dir, 
+                                                take_subset=USE_SUBSET, 
+                                                use_filenames=None,
+                                                rtwl=rtwl,
+                                                completion_mode=get_config("COMPLETION_MODE"), #Hardcode these for right now.
+                                                logging_level=get_config("LOG_LEVEL")
+                                                )
 
 
 def filter_all_questions(cleaned_paragraphs: str, judged_worthy_for_questions, LLM: dict, worthy_for_questions_output_dir: str):
@@ -3344,11 +3243,17 @@ class JudgeParagraphs:
 
     def return_judged_worthy_for_questions(self, cleaned_paragraphs, LLM, text_manually_cleaned_arg, override_judge_paragraph_presets=None):
 
+        if get_config("DEBUG_MODE"):
+            for category, setting in LLM.items():
+                logger.info(f"LLM Configs\ncategory:{category}\nsetting{setting}")
+
         # Put the overrides in the LLM dictionary. Defaults to None per the function inputs.
         LLM['override_judge_paragraph_presets'] = override_judge_paragraph_presets
+        llm_type = LLM.get('type')
 
         # Define the worthy_for_questions output directory.
-        worthy_for_questions_output_dir = "./worthy_for_questions"
+        # Hardcode for right now
+        worthy_for_questions_output_dir = "./ComfyUI/output/worthy_for_questions"
 
         # If the worthy_for_questions output directory doesn't exist, create it.
         if not os.path.exists(worthy_for_questions_output_dir):
@@ -3358,11 +3263,11 @@ class JudgeParagraphs:
             # Create the question container if the text hasn't been manually cleaned.
             judged_worthy_for_questions = []
 
-            if LLM['type'] == "llamacpp": # If the llm type is llama, send it down the regular Llama-cpp route.
+            if llm_type == "llamacpp": # If the llm type is llama, send it down the regular Llama-cpp route.
                 judged_worthy_for_questions = filter_all_questions(cleaned_paragraphs, judged_worthy_for_questions, LLM, )
                 return(judged_worthy_for_questions,)
 
-            elif LLM['type'] == "aphrodite": # If the llm type is aphrodite, send it down the async aphrodite route.
+            elif llm_type == "aphrodite": # If the llm type is aphrodite, send it down the async aphrodite route.
                 try:
                     judged_worthy_for_questions = asyncio.run(
                         await_filter_all_questions(
@@ -3377,7 +3282,7 @@ class JudgeParagraphs:
                 except RuntimeError as e:
                     logger.error(f"RUNTIME ERROR in aphrodite-engine route of class JudgeParagraphs: {e}")
 
-            elif LLM['type'] == "api": 
+            elif llm_type == "api": 
                 # If the llm type is an api, send it down the api route. 
                 # Since API and aphrodite are handled in the EngineWrapper class, the same code should work for both.
                 try:
@@ -3412,6 +3317,96 @@ class JudgeParagraphs:
 #### ReturnMultiturnConversationInfo Functions #### TODO: Make the file folders editable.
 ###################################################
 
+def combine_traits(personality_matrix):  # GPT-generated
+
+    # Using itertools.product to generate all possible combinations
+    combinations = itertools.product(*personality_matrix)
+
+    # Joining each combination into a single string
+    combined_traits = [
+        "\n".join(combination).strip().replace("\n\n", "\n")
+        for combination in combinations
+    ]
+
+    return combined_traits
+
+def special_instructions(n=1, non_axis_traits=False, non_axis_traits_only=False):
+    """
+    documentation todo
+    """
+
+    ### NOTE on how traits are planned out for this step ###
+    # Here're the copy-pasted thoughts from my planning document, now slightly cleaned-up for the release of Augmentoolkit. The TLDR is at the bottom. The inspiration for this personality system is the main thing I gained from my math class this semester.
+    # CHARACTER PLANNING
+    # Consider that we can represent a character's personality a vector with multiple dimensions. Now, we could define any number of individual dimensions, and lots of them would be right: intelligence, extraversion, industriousness, etc. But in the default version of the Augmentool we're doing roleplay, so we want to pick a set of dimensions using which we can describe accurately and concisely the characters that might show up in a roleplay. Consider that if a personality trait is a vector in 3-space, we want to pick traits that aren't coplanar -- ie, that each describe something unique, though possibly with some partial overlap. Ideally, they'd all be perpendicular -- maximally unique traits.
+    # I believe I have found 3 such axes that are useful for roleplay:
+    # Assertiveness
+    # Kindness/Morality
+    # Horniness (one of the few things we have an edge over GPT in)
+    # So we have
+    # Chaste------------------------------------normal----------------------------------------------------------------Slaanesh
+    # Shy/Withdrawn/Timid (Bocchi)--------------Has moments of shyness and courage------------------------------------James Bond
+    # Kind--------------------------------------Good and bad sides ---------------------------------------------------politician
+    # We make more verbose descriptions of each trait and place them in a matrix, reflecting the visualization above. We then create a list of all possible combinations of one item from each row and randomly sample from it for the special instruction.
+
+    # NOTE TLDR In laymans terms: we make a grid of traits, where each row represents a trait and values along it indicate different expressions of that trait; then we pick one value from each row and shove it onto the context window as a "special instruction".
+
+    # Two additional dimensions I thought of afterwards but have never tested: intellectual sophistication, and age. I might add these if testing shows that the AI can handle them, but no few-shot example has anywhere near 5 combinations, so we'll see.
+
+    ## NOTE You may (and are encouraged to!) add your own trait dimensions here, to make the character personalities used more accurately reflect your specific use case and preference. Since every possible combination of one trait from each row is put into the list, you will get a lot of variety with your characters for not much work.
+    # NOTE Chaste and puritan characters have a tendency to be interpreted by the AI as being religious, possibly because of "puritan", even though I initially just meant for this to be the opposite of horny. I'm leaving this in as a way to counteract occasional anti-religious bias and the AI's own personality.
+
+    axis_traits = [
+        [
+            "The character should be chaste and puritanical.",
+            "",
+            "The character should be very seductive and flirtatious.",
+        ],  # Horniness (middle deliberately left blank so that the model does not mention it, since "normal" people don't usually bring up sex in common conversation... right?)
+        [
+            "The character should be shy, withdrawn, and timid.",
+            "The character should be neither particularly bold, nor particularly timid.",
+            "The character should be assertive and bold.",
+        ],  # Assertiveness
+        [
+            "The character should be kind and agreeable.",
+            "The character should have both good and bad sides.",
+            "The character should be an awful person, and should be enjoying every second of it."
+            # "The character should be an awful person, possessing a number of vices (that are compatible with the previously-mentioned instructions)."
+        ],  # Kindness/Morality
+        # ["The character should be a young adult.", "the character should be middle-aged." "The character should be in late adulthood."], # Age group
+        # ["The character should be unsophisticated and crude.", "The character should be decently smart and refined.", "The character should be the epitome of intellectual sophistication."],
+    ]
+
+    non_axis_trait_list = [  # The following are examples of traits that are not on the axes above, but are still useful for character creation. Typically use these if you want to easily hardcode your characters to all have a trait. I've not tested all of them, and I've not tested them in combination with the axis traits. But if you prefer a more manual approach to character creation, you can use stuff like this.
+        """The character should be a catgirl who inserts "nya" into every sentence. and makes cat puns.""",  # someone actually has to do this, I'm serious, it'll be purrfect, nya~
+        # They can be short and used in combination with the axis traits; or long and replace them.
+        """The character should be a Japanese High School student.
+The character should be a girl.
+The character should be decently smart, but not genius-level.
+The character should be very kind, but too gentle and too much of a pushover for their own good.""",
+        """The character should be an awful person, and enjoying every second of it.
+The character should be intellectually brilliant.
+The character should be condescending and rude.""",
+        """The character should be a young adult.
+The character should be antisocial and coarse.
+The character should be a smoker."""
+        """The character should be middle-aged.
+The character should be narcissistic."""
+        # """The character should be edgy and nihilistic."""
+    ]
+
+    if not non_axis_traits_only:
+        traits = combine_traits(axis_traits)
+
+        selected_traits = random.sample(traits, 1)
+        if non_axis_traits:
+            selected_traits += random.sample(non_axis_trait_list, 1)
+
+    if non_axis_traits_only:
+        selected_traits = random.sample(non_axis_trait_list, 1)
+
+    # Return the combined string, with each sentence on a new line
+    return selected_traits[0]
 
 
 def create_character_card_many_tuples(qatuples, plan, instructions, initialized_model, cheap_mode=False):  # Use cheap mode if you don't have the compute power to crank up the context to 8k using RoPE
@@ -3500,9 +3495,11 @@ def create_character_card_plan_many_tuples(qatuples, initialized_model):
     if toggle_for_special_functions == "special_instructions":
         instructions_string = special_instructions(n=1)
     elif toggle_for_special_functions == "special_instructions_prototype":
-        instructions_string = special_instructions_prototype(n=1)
+        #instructions_string = special_instructions_prototype(n=1)
+        pass
     else:
-        instructions_string = special_instructions_prototype2(n=1)
+        #instructions_string = special_instructions_prototype2(n=1)
+        pass
 
     prompt_content = {
         "qatuples": qatuples,
@@ -3772,48 +3769,68 @@ class ReturnMultiturnConversationInfoSimple: # TODO Write function documentation
                 "LLM": ("LLM",),
                 "multi_turn_convs_info_dir": ("STRING", {"default": 'multi_turn_convs_info_dir'},),
                 "assistant_mode_arg": (["Off","On"],),
-                "arrangements_to_take": ("INT", {"default:": 3, "min": 1, "max": 10, "step":1},),
+                "rearrangements_to_take_arg": ("INT", {"default:": 3, "min": 1, "max": 10, "step":1},),
+                "use_filenames_arg": (["False","True"],),
                 "purge_loaded_llm_from_memory_after_node_is_done": (["Off","On"],),
+                "use_config_file_presets_instead": (["True","False"],), 
             },
         }
     RETURN_TYPES = ("OUTPUT_TEXT","PURGE_TRIGGER",)
     RETURN_NAMES = ("multi_turn_convs_info",)
     FUNCTION = "return_multi_turn_conversation_info"
 
-    CATEGORY = "output_generation"
+    CATEGORY = "augmentoolkit_functions"
 
     def return_multi_turn_conversation_info(self, 
                                             qa_tuples_by_paragraph, 
                                             LLM, 
                                             multi_turn_convs_info_dir, 
                                             assistant_mode_arg, 
-                                            arrangements_to_take, 
-                                            purge_loaded_llm_from_memory_after_node_is_done):
+                                            arrangements_to_take_arg,
+                                            use_filenames_arg, 
+                                            purge_loaded_llm_from_memory_after_node_is_done,
+                                            use_config_file_presets_instead):
 
-        # Set the assistant_mode boolean variable.
-        #if assistant_mode_arg == "On":
-       #     ASSISTANT_MODE = True
-       # else:
-       #     ASSISTANT_MODE = False
-
-        if not os.path.exists(f"./{multi_turn_convs_info_dir}"):
-            os.makedirs(f"./{multi_turn_convs_info_dir}")
+        # Determine where these variables' values come: the config.yml file, or the node itself.
+        if use_config_file_presets_instead == "True": # Use presets from the config.yml file.
+            assistant_mode = get_config("ASSISTANT_MODE")
+            rearrangements_to_take = get_config("REARRANGEMENTS_TO_TAKE")
+            use_filenames = get_config("USE_FILENAMES")
+        else: # Use presets from the node.
+            arrangements_to_take = arrangements_to_take_arg
+            if assistant_mode_arg == "On":
+                assistant_mode = True
+            else:
+                assistant_mode = False
+            if use_filenames_arg == "True":
+                use_filenames = True
+            else:
+                use_filenames = False
+                
+        try:
+            if not os.path.exists(f"./{multi_turn_convs_info_dir}"):
+                os.makedirs(f"./{multi_turn_convs_info_dir}")
+        except Exception as e:
+            logger.exception(f"ERROR: 'return_multi_turn_conversation_info' function could not create its directory using the name '{multi_turn_convs_info_dir}' due to: {e}. \n This was likely caused by invalid characters or syntax in the given folder name.")
+            raise e
 
         multi_turn_convs_info = []
 
-        logger.info(f"\n*** INPUT FOR qa_tuples_by_paragraph *** \n{qa_tuples_by_paragraph} \n*** INPUT FOR qa_tuples_by_paragraph *** ")
+        if get_config("DEBUG_MODE"):
+            logger.info(f"\n*** INPUT FOR qa_tuples_by_paragraph *** \n{qa_tuples_by_paragraph} \n*** INPUT FOR qa_tuples_by_paragraph *** ")
 
         if LLM['type'] == 'llamacpp':
             for idx, group in enumerate(qa_tuples_by_paragraph):
                 logger.info(f"\n*** Current qa_tuples_by_paragraph *** \ngroup:{group} \nidx:{idx} ")
+
                 all_permutations = list(itertools.permutations(group))
-                logger.info(f"all_permutations:\n{all_permutations}\nall_permutations")
-
                 sample_size = min(arrangements_to_take, len(all_permutations))
-                logger.info(f"sample_size:\n{sample_size}\sample_size")
-
                 sampled_permutations = random.sample(all_permutations, sample_size)
-                logger.info(f"sampled_permutations:\n{sampled_permutations}\sampled_permutations")
+
+                if get_config("DEBUG_MODE"):
+                    logger.info(f"all_permutations:\n{all_permutations}\nall_permutations")
+                    logger.info(f"sample_size:\n{sample_size}\sample_size")
+                    logger.info(f"sampled_permutations:\n{sampled_permutations}\sampled_permutations")
 
                 group_convs_info = []
 
@@ -3822,6 +3839,7 @@ class ReturnMultiturnConversationInfoSimple: # TODO Write function documentation
 
                     # Skip if file already exists
                     if not os.path.exists(file_path):
+                        print(f"Writing information for idx:{idx} to '{file_path}' in '{multi_turn_convs_info_dir}' directory...")
                         info = make_multiturn_conversation_info(perm, LLM)
 
                         if info is not None:
@@ -3830,20 +3848,20 @@ class ReturnMultiturnConversationInfoSimple: # TODO Write function documentation
 
                         group_convs_info.append(info)
                     else:
-                        logger.info(f"Skipped generating {file_path} as it already exists")
+                        print(f"Skipped generating {file_path} as it already exists.")
 
                 multi_turn_convs_info.append(group_convs_info)
 
         elif LLM['type'] == 'aphrodite':
             tasks = [
-                augmentoolkit_async_2_functions.create_info(
+                aug_async.create_info(
                     idx,group,
                     LLM, 
-                    get_config("ASSISTANT_MODE"), 
+                    assistant_mode, 
                     multi_turn_convs_info,
                     multi_turn_convs_info_dir, 
-                    rearrangements_to_take=get_config("REARRANGEMENTS_TO_TAKE"),
-                    use_filenames=get_config("USE_FILENAMES"),  
+                    rearrangements_to_take=rearrangements_to_take,
+                    use_filenames=use_filenames,  
                     logging_level=get_config("LOG_LEVEL")) for idx,group in enumerate(qa_tuples_by_paragraph)
             ]
             limited_tasks_infocreation = [run_task_with_limit(task) for task in tasks]
@@ -3851,14 +3869,14 @@ class ReturnMultiturnConversationInfoSimple: # TODO Write function documentation
                 
         elif LLM['type'] == 'api':
             tasks = [
-                augmentoolkit_async_2_functions.create_info(
+                aug_async.create_info(
                     idx,group,
                     LLM, 
-                    get_config("ASSISTANT_MODE"), 
+                    assistant_mode, 
                     multi_turn_convs_info,
                     multi_turn_convs_info_dir, 
-                    rearrangements_to_take=get_config("REARRANGEMENTS_TO_TAKE"),
-                    use_filenames=get_config("USE_FILENAMES"), 
+                    rearrangements_to_take=rearrangements_to_take,
+                    use_filenames=use_filenames, 
                     logging_level=get_config("LOG_LEVEL")) for idx,group in enumerate(qa_tuples_by_paragraph)
             ]
             limited_tasks_infocreation = [run_task_with_limit(task) for task in tasks]
@@ -3967,7 +3985,7 @@ class GroupVettedTuplesByText:
 
     FUNCTION = "group_vetted_qa_tuple_by_paragraph"
 
-    CATEGORY = "output_generation"
+    CATEGORY = "augmentoolkit_functions"
 
     def group_vetted_qa_tuple_by_paragraph(self, vetted_qa_tuples, check_for_matching_subtrings_anywhere):
 
@@ -4008,7 +4026,7 @@ class LlmLoaderAdvanced:
     RETURN_TYPES = ("LLM",)
     FUNCTION = "load_model"
 
-    CATEGORY = "augmentoolkit_functions/advanced/llm_loaders"
+    CATEGORY = "augmentoolkit_functions/loaders/advanced"
 
     @conditional_log_arguments
     def load_model(self, model_name, n_gqa_arg, offload_kqv_arg, n_ctx_arg, rope_freq_scale_arg, n_gpu_layers_arg, verbose_arg, purge_trigger=False):
@@ -4061,7 +4079,13 @@ class LlmLoaderAdvanced:
             raise e
 
         # Export the "LLM" dictionary object.
-        return ({"LLM": config_list},)
+        return ({
+            'llm': llm,
+            'type': 'llamacpp',
+            'prompt': None,
+            'grammar': None,
+            'override_llm_presets': False
+        },)
 
 
 # TODO Figure out what types the quantization argument can take without it breaking.
@@ -4088,48 +4112,59 @@ class LlmLoaderAphroditeSimple:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "model_name": (folder_paths.get_filename_list("llm"),), # String
-                "quantization": (["gptq","awq","gguf","quip","squeezellm",None]) # List
+                "model_name": ("STRING", {"default": 'FlatOrcamaid-13B-v0.2-GPTQ'},), # String
+                "quantization": (["gptq","awq","gguf","quip","squeezellm"],), # List
             },
             "optional": {
             },
         }
-
-    # ComfyUI will effectively return the Aphrodite class instantiation provided by execute() and call it an LLM
+    # ComfyUI will effectively return the Aphrodite class instantiation provided by engine_wrapper_aphrodite() and call it an LLM
     RETURN_TYPES = ("LLM",)
     FUNCTION = "engine_wrapper_aphrodite"
-    CATEGORY = "augmentoolkit_functions/advanced/aphrodite"
+
+    CATEGORY = "augmentoolkit_functions/loaders"
 
     @conditional_log_arguments
     def engine_wrapper_aphrodite(self, model_name, quantization):
 
-        try: # Define the engine wrapper.
-            engine_wrapper = EngineWrapper(model=model_name, mode="aphrodite", quantization=quantization)
-        except Exception as e:
-            logger.exception(f"An Exception occured in 'engine_wrapper_aphrodite' function in class LlmLoaderAphroditeSimple: {e}")
-            raise e
-        
         # Set the loaded_llm_name global variable
         folder_paths.set_loaded_llm_name(model_name)
         logger.info(f"global variable loaded_llm_name set to: {folder_paths.get_loaded_llm_name()}")
         time.sleep(3)
 
+        llm_dir = folder_paths.get_llm_directory()
+        model_name = os.path.join(llm_dir, model_name)
+        
+        try: # Define the engine wrapper.
+            engine_wrapper = EngineWrapper(model_name, mode="aphrodite", quantization=quantization)
+        except Exception as e:
+            logger.exception(f"An Exception occured in 'engine_wrapper_aphrodite' function in class LlmLoaderAphroditeSimple: {e}")
+            raise e
+        
         # Record the model name and presets to the debug log.
         logger.info(f"Aphrodite-Engine: Model {model_name} succesfully loaded.")
         logger.info(f"\nAphrodite-Engine Model presets:\nquantization={quantization}\nengine_use_ray=False\ndisable_log_requests=True\nmax_model_len=12000\ndtype='float16'\n")
         time.sleep(3)
         
         # Put the engine wrapper and other arguments into the config_list
-        config_list = {
+        config_list = [
+            {
             'llm': engine_wrapper,
             'type': 'aphrodite',
             'prompt': None,
             'sampling_params': None,
             'override_aphrodite_sampling_presets': False,
-        }
+            }
+        ]
 
         # Export the "LLM" dictionary object.
-        return ({'LLM': config_list},)
+        return ({
+            'llm': engine_wrapper,
+            'type': 'aphrodite',
+            'prompt': None,
+            'sampling_params': None,
+            'override_aphrodite_sampling_presets': False,
+        },)
 
 
 class LlmLoaderSimple:
@@ -4154,13 +4189,14 @@ class LlmLoaderSimple:
     RETURN_TYPES = ("LLM",)
     FUNCTION = "load_model"
 
-    CATEGORY = "augmentoolkit_functions/llm_loaders"
+    CATEGORY = "augmentoolkit_functions/loaders"
 
     @conditional_log_arguments
     def load_model(self, model_name, purge_trigger=False):
 
         # Unload the model from RAM and VRAM if the purge trigger is true.
-        # Note that since the purge is done in another node, the purge_trigger class input is solely to keep the function in the node chain.
+        # Note that since the purge is done in another node, 
+        # the purge_trigger class input is a dummy input that allows this node to act as both a beginning and intermediate linkage in a workflow.
         if purge_trigger:
             logger.info(f"Previous model cleared from RAM and/or VRAM. Loading {model_name}...")
 
@@ -4205,7 +4241,13 @@ class LlmLoaderSimple:
             raise e
 
         # Export the "LLM" dictionary object.
-        return ({"LLM": config_list},)
+        return ({
+            'llm': llm,
+            'type': 'llamacpp',
+            'prompt': None,
+            'grammar': None,
+            'override_llm_presets': False
+        },)
 
 
 #TODO Make sure the preset defaults are proper.
@@ -4277,10 +4319,9 @@ class OverrideLlmPresetsInConnectedNodeAphrodite:
             },
         }
     RETURN_TYPES = ("LLM",)
-
     FUNCTION = "override_llm_presets_in_connected_node"
 
-    CATEGORY = "augmentoolkit_functions/advanced/debug"
+    CATEGORY = "augmentoolkit_functions/advanced/overrides"
 
     @conditional_log_arguments
     def override_llm_presets_in_connected_node(self, LLM, presence_penalty, frequency_penalty,
@@ -4379,7 +4420,7 @@ class OverrideLlmPresetsInConnectedNodeAphrodite:
             logger.exception(f"An Exception occurred in 'override_llm_presets_in_connected_node' function in class OverrideLlmPresetsInConnectedNodeAphrodite: {e}")
 
         # Export the "LLM" dictionary object.
-        return ({"LLM": config_list},)
+        return ({config_list},)
 
 
 #TODO This might cause problems if the nodes its hooked up to are run simultaneously, as it will be calling the same model with two different inputs at the same time.
@@ -4430,10 +4471,9 @@ class OverrideLlmPresetsInConnectedNodeLlama:
             },
         }
     RETURN_TYPES = ("LLM",)
-
     FUNCTION = "override_llm_presets_in_connected_node"
 
-    CATEGORY = "augmentoolkit_functions/advanced/debug"
+    CATEGORY = "augmentoolkit_functions/advanced/overrides"
 
     @conditional_log_arguments
     def override_llm_presets_in_connected_node(self, 
@@ -4450,7 +4490,7 @@ class OverrideLlmPresetsInConnectedNodeLlama:
         model = LLM['llm']
 
         if only_override_prompt_and_grammar == "False" and prompt is None and grammar is None:
-            logger.warning("Warning: Current node settings will generate an empty LLM object. Defaulting to downstream node presets.")
+            logger.warning("Current node settings will generate an empty LLM object. Defaulting to downstream node presets.")
             config_list = [ # Pass through the original model.
                     {
                         'llm': model,
@@ -4460,48 +4500,48 @@ class OverrideLlmPresetsInConnectedNodeLlama:
                         'override_llm_presets': False
                     }
                 ]
+        else:
+            try:
+                # Create a partial function and call it llm. Note that this is for a llama-cpp model.
+                llm = partial(model,  # First argument of partial is the function we want to fix some of the arguments for.
+                    max_tokens=max_tokens_arg,
+                    stop=stop_arg,
+                    echo= True if echo_arg == "True" else False,
+                    temperature=temperature_arg,
+                    top_k=top_k_arg,
+                    top_p=top_p_arg,
+                    min_p=min_p_arg,
+                    seed=seed_arg,
+                )
+                logger.info(f"Llama-cpp LLM override parameters set.")
+                time.sleep(3)
 
-        try:
-            # Create a partial function and call it llm. Note that this is for a llama-cpp model.
-            llm = partial(model,  # First argument of partial is the function we want to fix some of the arguments for.
-                max_tokens=max_tokens_arg,
-                stop=stop_arg,
-                echo= True if echo_arg == "True" else False,
-                temperature=temperature_arg,
-                top_k=top_k_arg,
-                top_p=top_p_arg,
-                min_p=min_p_arg,
-                seed=seed_arg,
-            )
-            logger.info(f"Llama-cpp LLM override parameters set.")
-            time.sleep(3)
-
-            # Set up a config list to be exported under the "LLM" object type.
-            # This creates a dictionary whose contents are the initialized model and overrides.
-            config_list = [
-                {
-                    'llm': llm,
-                    'type': 'llamacpp',
-                    'prompt': None if prompt is None else prompt,
-                    'grammar': None if grammar is None else grammar,
-                    'override_llm_presets': True if only_override_prompt_and_grammar == "False" else False
-                }
-            ]
+                # Set up a config list to be exported under the "LLM" object type.
+                # This creates a dictionary whose contents are the initialized model and overrides.
+                config_list = [
+                    {
+                        'llm': llm,
+                        'type': 'llamacpp',
+                        'prompt': None if prompt is None else prompt,
+                        'grammar': None if grammar is None else grammar,
+                        'override_llm_presets': True if only_override_prompt_and_grammar == "False" else False
+                    }
+                ]   
 
             # Debug messages that record the config_list contents.
-            if prompt is None and grammar is None:
-                logger.info(f"LLM parameter override settings: \nLLM Settings: {llm}\nPrompt: NA\nGrammar: NA")
-            elif prompt is not None and grammar is None:
-                logger.info(f"LLM parameter override settings: \nLLM Settings: {llm}\nPrompt: {prompt}\nGrammar: NA")
-            elif prompt is None and grammar is not None:
-                logger.info(f"LLM parameter override settings: \nLLM Settings: {llm}\nPrompt: NA\nGrammar: {grammar}")
-            elif prompt is not None and grammar is not None and only_override_prompt_and_grammar == "True":
-                logger.info(f"LLM parameter override settings: \nLLM Settings: NA\nPrompt: {prompt}\nGrammar: {grammar}")
-            else:
-                logger.info(f"LLM parameter override settings: \nLLM Settings: {llm}\nPrompt: {prompt}\nGrammar: {grammar}")
+                if prompt is None and grammar is None:
+                    logger.info(f"LLM parameter override settings: \nLLM Settings: {llm}\nPrompt: NA\nGrammar: NA")
+                elif prompt is not None and grammar is None:
+                    logger.info(f"LLM parameter override settings: \nLLM Settings: {llm}\nPrompt: {prompt}\nGrammar: NA")
+                elif prompt is None and grammar is not None:
+                    logger.info(f"LLM parameter override settings: \nLLM Settings: {llm}\nPrompt: NA\nGrammar: {grammar}")
+                elif prompt is not None and grammar is not None and only_override_prompt_and_grammar == "True":
+                    logger.info(f"LLM parameter override settings: \nLLM Settings: NA\nPrompt: {prompt}\nGrammar: {grammar}")
+                else:
+                    logger.info(f"LLM parameter override settings: \nLLM Settings: {llm}\nPrompt: {prompt}\nGrammar: {grammar}")
 
-        except Exception as e:
-            logger.exception(f"An Exception occurred in 'override_llm_presets_in_connected_node' function in class OverrideLlmPresetsInNode: {e}")
+            except Exception as e:
+                logger.exception(f"An Exception occurred in 'override_llm_presets_in_connected_node' function in class OverrideLlmPresetsInNode: {e}")
 
         # Export the "LLM" dictionary object.
         return ({"LLM": config_list},)
@@ -4532,7 +4572,7 @@ class PurgeLlmFromRamOrVram:
 
     OUTPUT_NODE = True
 
-    CATEGORY = "augmentoolkit_functions/helper_functions"
+    CATEGORY = "augmentoolkit_functions/advanced"
 
     def purge_llm_from_ram_or_vram(self, purge_trigger=False):
         reload_model = False
@@ -4639,7 +4679,7 @@ class InputTextLoaderSimple:
     RETURN_TYPES = ("RAW_TEXT",)
     FUNCTION = "load_text"
 
-    CATEGORY = "llm_loaders"
+    CATEGORY = "augmentoolkit_functions/loaders"
     
     def load_text(self, text_name):
         text_path = os.path.join(self.input_dir, f"{text_name}")
@@ -4656,7 +4696,7 @@ class InputTextLoaderSimple:
             return (raw_text,) #So hacky...
         except Exception as e:
             logger.exception(f"An Exception occured in load_text function in InputTextLoaderSimple class: {e}")
-            logger.info("Chosen text failed to load.")
+            logger.info(f"Chosen text '{folder_paths.get_raw_text_name()}' failed to load!")
 
 
 #######################################
@@ -4740,8 +4780,7 @@ class SelectRandomLlm:
 ###############################################
 
 # This is intentional, as node classes cannot have the same name.
-NODE_CLASS_MAPP\INGS = {
-    "AutoFinetune": AutoFinetune,
+NODE_CLASS_MAPPINGS = {
     "ChunkParagraphs": ChunkParagraphs,
     "DisplayOutputText": DisplayOutputText,
     "FilterAndGraph": FilterAndGraph,
@@ -4753,16 +4792,18 @@ NODE_CLASS_MAPP\INGS = {
     "LlmLoaderAphroditeSimple": LlmLoaderAphroditeSimple,
     "LlmLoaderSimple": LlmLoaderSimple,
     "LlmLoaderAdvanced": LlmLoaderAdvanced,
+    "MakeDatasetMultiturnConversationSimple": MakeDatasetMultiturnConversationSimple,
     "OverrideLlmPresetsInConnectedNodeLlama": OverrideLlmPresetsInConnectedNodeLlama,
-    "OverrideLlmPresetsInConnectedNodeAphrodite": OverrideLlmPresetsInConnectedNodeAphrodite, 
-    #"OverrideLlmPresetsInConnectedNodeOpenai": OverrideLlmPresetsInConnectedNodeOpenai,
-    "ReturnMultiturnConversationInfoAdvanced": ReturnMultiturnConversationInfoAdvanced,
+    "OverrideLlmPresetsInConnectedNodeAphrodite": OverrideLlmPresetsInConnectedNodeAphrodite,
     "ReturnMultiturnConversationInfoSimple": ReturnMultiturnConversationInfoSimple,
+    "ReviseQATuples": ReviseQATuples,
     "WriteOutputToFile": WriteOutputToFile,
 }
+  #"OverrideLlmPresetsInConnectedNodeOpenai": OverrideLlmPresetsInConnectedNodeOpenai,
+#     "ReturnMultiturnConversationInfoAdvanced": ReturnMultiturnConversationInfoAdvanced,
+
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "AutoFinetune": "Autofinetune: Generate Conversations, then Fine-Tune a Model",
     "ChunkParagraphs":"Chunk Plain-text File into Paragraphs",
     "DisplayOutputText": "Display Output Text in Console",
     "FilterAndGraph": "Filter and Graph Judged Paragraphs",
@@ -4774,12 +4815,13 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "LlmLoaderAdvanced": "Load LLM (Advanced) (Llama-cpp-python)",
     "LlmLoaderAphroditeSimple": "Load LLM (Simple) (Aphrodite)",
     "LlmLoaderSimple": "Load LLM (Simple) (Llama-cpp-python)",
+    "MakeDatasetMultiturnConversationSimple": "Make Dataset: Multi-turn Conversation",
     "OverrideLlmPresetsInConnectedNodeLlama": "Override LLM Presets in Connected Node(s) (Llama-cpp-python)",
     "OverrideLlmPresetsInConnectedNodeAphrodite": "Override LLM Prests in Connected Node(s) (Aphrodite)",
     #"OverrideLlmPresetsInConnectedNodeOpenai": "Override LLM Presets in Connected Node(s) (OpenAI)",
     "ReturnMultiturnConversationInfoAdvanced": "Create Multi-turn Conversation Info (Advanced)",
     "ReturnMultiturnConversationInfoSimple": "Create Multi-turn Conversation Info (Simple)",
-
+    "ReviseQATuples": "Revise QA Tuples (Simple)",
     "WriteOutputToFile": "Write Output to File",
 }
 
@@ -4787,169 +4829,4 @@ NODE_DISPLAY_NAME_MAPPINGS = {
 #############################
 #### OTHER ODDS AND ENDS ####
 #############################
-
-async def make_async_api_call(
-    prompt=None, sampling_parameters={}, url="http://127.0.0.1:8080", messages=None
-):
-    # Determine the endpoint based on the presence of messages
-    if messages is not None:
-        endpoint = "/v1/chat/completions"
-        data = json.dumps(
-            {
-                "messages": messages,
-                **sampling_parameters,  # Assuming sampling parameters can be applied to chat
-            }
-        )
-    else:
-        endpoint = "/completion"
-        data = json.dumps({"prompt": prompt, **sampling_parameters})
-
-    # Complete the URL with the chosen endpoint
-    full_url = url + endpoint
-
-    # Use aiohttp to make the async request
-    async with aiohttp.ClientSession() as session:
-        async with session.post(
-            full_url, data=data, headers={"Content-Type": "application/json"}, ssl=False
-        ) as response:
-            if response.status == 200:
-                # Parse the JSON response
-                response_json = await response.json()
-                if prompt:
-                    return prompt + response_json["content"]
-                else:
-                    return response_json["choices"][0]["content"]
-            else:
-                return {"error": f"API call failed with status code: {response.status}"}
-
-class EngineWrapper:
-    def __init__(self, model, 
-                 api_key=None, 
-                 base_url=None, 
-                 mode="api", # can be one of api, aphrodite, llama.cpp
-                 quantization="gptq", # only needed if using aphrodite mode
-                ):
-        if mode == "aphrodite":
-            engine_args = AsyncEngineArgs(
-                model=model,
-                quantization=quantization,
-                engine_use_ray=False,
-                disable_log_requests=True,
-                max_model_len=12000,
-                dtype="float16"
-            )
-            self.engine = AsyncAphrodite.from_engine_args(engine_args)
-        self.mode = mode
-        self.client = AsyncOpenAI(api_key=api_key, base_url=base_url)
-        self.model = model
-
-    async def submit_completion(self, prompt, sampling_params):  # Submit request and wait for it to stream back fully
-
-        if "temperature" not in sampling_params:
-            sampling_params["temperature"] = 1
-        if "top_p" not in sampling_params:
-            sampling_params["top_p"] = 1
-        if "max_tokens" not in sampling_params:
-            sampling_params["max_tokens"] = 3000
-        if "stop" not in sampling_params:
-            sampling_params["stop"] = []
-        if "n_predict" not in sampling_params and self.mode == "llamacpp":
-            sampling_params["n_predict"] = sampling_params["max_tokens"]
-
-        if get_config("DEBUG_MODE"):
-            logger.info(f"\n\nSETTINGS DUMP\n\n{self.model}\n{prompt}\n{sampling_params['temperature']}\n{sampling_params['top_p']}\n{sampling_params['max_tokens']}\n")
-
-        if self.mode == "llamacpp": # Should never reach this route, as mode will never be set to this value.
-            return await make_async_api_call(prompt=prompt, sampling_parameters=sampling_params)
-        
-        if self.mode == "aphrodite":
-            aphrodite_sampling_params = SamplingParams(**sampling_params)
-            request_id = make_id()
-            outputs = []
-            # self.engine.add_request(request_id,prompt,sampling_params) #old sync code
-            final_output = None
-            async for request_output in self.engine.generate(
-                prompt, aphrodite_sampling_params, request_id
-            ):
-                outputs.append(request_output.outputs[0].text)
-                final_output = request_output
-
-            # full_output = "".join(outputs)
-            return final_output.prompt + final_output.outputs[0].text
-        
-        if self.mode == "api":
-            completion = await self.client.completions.create(
-                model=self.model,
-                prompt=prompt,
-                temperature=sampling_params["temperature"],
-                top_p=sampling_params["top_p"],
-                stop=sampling_params["stop"],
-                max_tokens=sampling_params["max_tokens"],
-            )
-            completion = completion.choices[0].text
-            return prompt + completion
-    
-    async def submit_chat(
-    self, messages, sampling_params
-    ):  # Submit request and wait for it to stream back fully
-        if "temperature" not in sampling_params:
-            sampling_params["temperature"] = 1
-        if "top_p" not in sampling_params:
-            sampling_params["top_p"] = 1
-        if "max_tokens" not in sampling_params:
-            sampling_params["max_tokens"] = 3000
-        if "stop" not in sampling_params:
-            sampling_params["stop"] = []
-        
-        if self.mode == "llamacpp":
-            return await make_async_api_call(messages=messages, sampling_parameters=sampling_params)
-        elif self.mode == "api":
-            # print("\n\n\nMESSAGES\n\n\n")
-            # print(messages)
-            messages_cleaned = [{"role": message["role"], "content": message["content"].replace("\\n","\n")} for message in messages]
-            # print(messages_cleaned)
-            completion = await self.client.chat.completions.create(
-                model=self.model,
-                messages=messages_cleaned,
-                temperature=sampling_params["temperature"],
-                top_p=sampling_params["top_p"],
-                stop=sampling_params["stop"],
-                max_tokens=sampling_params["max_tokens"],
-            )
-            completion = completion.choices[0].message.content
-            return completion
-        else:
-            raise Exception("Aphrodite not compatible with chat mode!")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 

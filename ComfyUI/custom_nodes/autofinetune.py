@@ -1,21 +1,13 @@
-import ast
-import asyncio
 from email.utils import formataddr
-import glob
-import io
-import importlib
-import inspect
-import itertools
 import json
-import logging
 import os
 import random
 import re
 #import sentiencepiece
 import sys
 import time
-from numpy.random import f
-from scipy import rand
+from numpy.random import f, rand
+#from scipy import rand
 import torch
 import traceback
 import uuid
@@ -40,21 +32,12 @@ from transformers import AutoTokenizer
 from transformers.models.deberta.modeling_deberta import DebertaLayerNorm
 from typing import Any, List, Tuple, Union
 
-import nltk
-nltk.download("punkt")
-from nltk.tokenize import sent_tokenize
 
 import comfy.utils
 import comfy.model_management
 from comfy.cli_args import args
 
-from custom_nodes.logger import logger
-import custom_nodes.augmentoolkit_async_functions
-import custom_nodes.augmentoolkit_api_functions
-from custom_nodes.grammars import Grammars
-
-import folder_paths
-
+from logger import logger
 # Try to import all packages for the Aphrodite and API nodes.
 try:
     from aphrodite import (
@@ -69,21 +52,20 @@ except:
     APHRODITE_NOT_INSTALLED = True
 
 try:
-    import openai>=0.10.2
+    from openai import OpenAI
 except:
     logger.info("OpenAI client not installed.")
     OPENAI_NOT_INSTALLED = True
 
 try:
-    import together>=0.1.5
+    import together
 except:
     logger.info("Together.ai client not  installed.")
     TOGETHER_NOT_INSTALLED = True
 
-
-
-
-
+import folder_paths
+from program_configs import get_config
+from engine import EngineWrapper, GenerationStep, format_external_text_like_f_string, load_external_prompt_and_grammar
 
 # TODO Redo how APIs are implemented, per ComfyUI-Llama and NodeGPT.
 # TODO Figure out how to get scientific notation to work.
@@ -165,7 +147,11 @@ class AutoFinetune:
                 input_messages = [
                     {
                         "role": "system",
-                        "content": f"""You are a helpful assistant designed to output conversations in JSON array format. Generate an array of {conversation_batch_size} elements, each being a conversation entry with a user input and your response, with the keys 'user' and 'assistant', one message each per conversation, with {conversation_batch_size} of these conversations in the array you produce.The purpose of this is to fine-tune a model based for the user using this data, so tailor the questions and answers to match the needs based on the user's input. The array should start with conversations as the top level with an array of conversations.
+                        "content": f"""You are a helpful assistant designed to output conversations in JSON array format. 
+                        Generate an array of {conversation_batch_size} elements, each being a conversation entry with a user input and your response, with the keys 'user' and 'assistant', 
+                        one message each per conversation, with {conversation_batch_size} of these conversations in the array you produce.
+                        The purpose of this is to fine-tune a model based for the user using this data, so tailor the questions and answers to match the needs based on the user's input. 
+                        The array should start with conversations as the top level with an array of conversations.
                         """
                     },
                     {
@@ -200,7 +186,11 @@ class AutoFinetune:
             input_messages = [
                 {
                     "role": "system",
-                    "content": f"""You are a helpful assistant designed to output conversations in JSON array format. Generate an array of {conversation_batch_size} elements, each being a conversation entry with a user input and your response, with the keys 'user' and 'assistant', one message each per conversation, with {conversation_batch_size} of these conversations in the array you produce.The purpose of this is to fine-tune a model based for the user using this data, so tailor the questions and answers to match the needs based on the user's input. The array should start with conversations as the top level with an array of conversations.
+                    "content": f"""You are a helpful assistant designed to output conversations in JSON array format. 
+                    Generate an array of {conversation_batch_size} elements, each being a conversation entry with a user input and your response, 
+                    with the keys 'user' and 'assistant', one message each per conversation, with {conversation_batch_size} of these conversations in the array you produce.
+                    The purpose of this is to fine-tune a model based for the user using this data, so tailor the questions and answers to match the needs based on the user's input. 
+                    The array should start with conversations as the top level with an array of conversations.
                     """
                 },
                 {
@@ -227,7 +217,7 @@ class AutoFinetune:
 
             # Extract the response.
             generated_content = response.choices[0].message.content
-            if DEBUG_MODE:
+            if get_config("DEBUG_MODE"):
                 logger.info(f"\n *** Completion from 'generate_conversations' function from class AutoFinetune *** \n{generated_content}\n*** Completion from 'generate_conversations' function from class AutoFinetune ***")
 
             # Save the response to a json file.

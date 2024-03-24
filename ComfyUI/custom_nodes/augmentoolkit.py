@@ -1469,7 +1469,8 @@ def generate_qa_tuples(LLM: dict,
     :return vetted_qa_tuples: A list of QA tuples, vetted for relevance and accuracy.
     """
     # Set directory for QA tuples, and make it if it doesn't exist.
-    qa_tuples_dir = f"./{qa_tuple_directory_name}"
+    # TODO Un-hardcode this when everything works.
+    qa_tuples_dir = f"./ComfyUI/output/{qa_tuple_directory_name}"
     if not os.path.exists(qa_tuples_dir):
         os.makedirs(qa_tuples_dir)
 
@@ -1481,15 +1482,18 @@ def generate_qa_tuples(LLM: dict,
     try:
         _ = filtered_worthy_for_questions
     except NameError:
+        logger.info("filtered_worthy_for_questions not found. Initializing filtered_worthy_for_questions list...")
         filtered_worthy_for_questions = []
 
     if filtered_worthy_for_questions is None:
         # Load all files in the qa_tuples_dir if filtered_worthy_for_questions is not initialized
+        logger.info("'filtered_worthy_for_questions' list is None. Loading json files from '{qa_tuple_directory_name}'...")
         existing_files = glob.glob(os.path.join(qa_tuples_dir, "*.json"))
 
         # Load QA tuples from an external json 
         for file_path in existing_files:
             with open(file_path, "r") as file:
+                logger.info(f"Loading file for 'filtered_worthy_for_questions' list: {file}")
                 qa_tuple = tuple(json.load(file))
             vetted_qa_tuples.append(qa_tuple)
 
@@ -1549,11 +1553,19 @@ def generate_qa_tuples(LLM: dict,
                     logger.exception(f"An Exception occurred in generate_qa_tuples function: {e}")
 
         elif LLM['type'] == 'aphrodite':
+            if get_config("DEBUG_MODE"):
+                logger.info(f"filtered_worthy_for_questions aphrodite:\n{filtered_worthy_for_questions}")
+                for idx, para in enumerate(filtered_worthy_for_questions):
+                    logger.info(f"idx: {idx}\npara: {para}")
+                    if para == "para":
+                        logger.error(f"filtered_worthy_for_questions variable is not being parsed correctly. 'para' is just 'para', instead of the text content.")
+                        raise ValueError
+
             # Create a list of tasks.
             tasks = [aug_async.generate_qatuples_from_para(
                 idx,
                 para,
-                engine_wrapper=LLM['llm'],
+                engine_wrapper=LLM,
                 vetted_qa_tuples=vetted_qa_tuples,
                 qa_tuples_dir=qa_tuples_dir,
                 double_check_counter=get_config("DOUBLE_CHECK_COUNTER")) for idx,para in enumerate(filtered_worthy_for_questions)
@@ -2938,7 +2950,7 @@ class FilterAndGraph:
                                 source_counts[source][1] += 1
             except Exception as e:
                 logger.exception(f"An Exception occurred in filter_and_graph function under class FilterAndGraph while trying to load jsons from '{directory_path}': {e}")
-        else:
+        else: # If judged_worthy_for_questions is not None, count the nones and not-nones within it.
             for paragraph, source in judged_worthy_for_questions:
                 if paragraph is None:
                     source_counts[source] = source_counts.get(source, [0, 0])
@@ -3032,14 +3044,16 @@ class ConvertDirectoryAndProcessConversations: #TODO Maybe merge into class Conv
 
 # Wrapper for the async 'filter_all_questions' function, since the main class function is not async.
 # TODO Change augmentoolkit_async_2_functions to augmentoolkit_async_functions when testing is complete.
-async def await_filter_all_questions(paragraphs_processed,
+# TODO Fix the halting issue with something other than timeout. The function is gunna take WAY longer than 10 minutes for long texts.
+async def async_filter_all_questions(paragraphs_processed,
                                      judged_worthy_for_questions, 
                                      LLM: dict, 
                                      output_dir: str, 
                                      USE_SUBSET: bool, 
                                      use_filenames=None, 
                                      rtwl=run_task_with_limit):
-    return await aug_async.filter_all_questions(paragraphs_processed, 
+    return await asyncio.wait_for(
+        aug_async.filter_all_questions(paragraphs_processed, 
                                                 judged_worthy_for_questions, 
                                                 LLM, 
                                                 output_dir, 
@@ -3048,7 +3062,7 @@ async def await_filter_all_questions(paragraphs_processed,
                                                 rtwl=rtwl,
                                                 completion_mode=get_config("COMPLETION_MODE"), #Hardcode these for right now.
                                                 logging_level=get_config("LOG_LEVEL")
-                                                )
+                                                ), timeout=600) #Timeout after 10 minutes.
 
 
 def filter_all_questions(cleaned_paragraphs: str, judged_worthy_for_questions, LLM: dict, worthy_for_questions_output_dir: str):
@@ -3249,7 +3263,7 @@ class JudgeParagraphs:
 
         # Put the overrides in the LLM dictionary. Defaults to None per the function inputs.
         LLM['override_judge_paragraph_presets'] = override_judge_paragraph_presets
-        llm_type = LLM.get('type')
+        llm_type = LLM['type']
 
         # Define the worthy_for_questions output directory.
         # Hardcode for right now
@@ -3269,14 +3283,13 @@ class JudgeParagraphs:
 
             elif llm_type == "aphrodite": # If the llm type is aphrodite, send it down the async aphrodite route.
                 try:
-                    judged_worthy_for_questions = asyncio.run(
-                        await_filter_all_questions(
-                            cleaned_paragraphs, 
-                            judged_worthy_for_questions, 
-                            LLM, 
-                            worthy_for_questions_output_dir, 
-                            get_config("USE_SUBSET")
-                        )
+                    # Schedule the coroutine to run and wait for its completion.
+                    async_filter_all_questions(
+                        cleaned_paragraphs, 
+                        judged_worthy_for_questions, 
+                        LLM, 
+                        worthy_for_questions_output_dir, 
+                        get_config("USE_SUBSET")
                     )
                     return(judged_worthy_for_questions,)
                 except RuntimeError as e:
@@ -3286,14 +3299,12 @@ class JudgeParagraphs:
                 # If the llm type is an api, send it down the api route. 
                 # Since API and aphrodite are handled in the EngineWrapper class, the same code should work for both.
                 try:
-                    judged_worthy_for_questions = asyncio.run(
-                        await_filter_all_questions(
-                            cleaned_paragraphs, 
-                            judged_worthy_for_questions, 
-                            LLM, 
-                            worthy_for_questions_output_dir, 
-                            get_config("USE_SUBSET")
-                        )
+                    async_filter_all_questions(
+                        cleaned_paragraphs, 
+                        judged_worthy_for_questions, 
+                        LLM, 
+                        worthy_for_questions_output_dir, 
+                        get_config("USE_SUBSET")
                     )
                     return(judged_worthy_for_questions,)
                 except RuntimeError as e:
@@ -3769,7 +3780,7 @@ class ReturnMultiturnConversationInfoSimple: # TODO Write function documentation
                 "LLM": ("LLM",),
                 "multi_turn_convs_info_dir": ("STRING", {"default": 'multi_turn_convs_info_dir'},),
                 "assistant_mode_arg": (["Off","On"],),
-                "rearrangements_to_take_arg": ("INT", {"default:": 3, "min": 1, "max": 10, "step":1},),
+                "arrangements_to_take_arg": ("INT", {"default:": 3, "min": 1, "max": 10, "step":1},),
                 "use_filenames_arg": (["False","True"],),
                 "purge_loaded_llm_from_memory_after_node_is_done": (["Off","On"],),
                 "use_config_file_presets_instead": (["True","False"],), 
@@ -4147,6 +4158,7 @@ class LlmLoaderAphroditeSimple:
         time.sleep(3)
         
         # Put the engine wrapper and other arguments into the config_list
+        """
         config_list = [
             {
             'llm': engine_wrapper,
@@ -4156,7 +4168,7 @@ class LlmLoaderAphroditeSimple:
             'override_aphrodite_sampling_presets': False,
             }
         ]
-
+        """
         # Export the "LLM" dictionary object.
         return ({
             'llm': engine_wrapper,

@@ -1,10 +1,8 @@
-import asyncio
+
 import glob
 from importlib.machinery import DEBUG_BYTECODE_SUFFIXES
-import inspect
 import itertools
 import json
-import logging
 import os
 import random
 import re
@@ -14,41 +12,34 @@ import traceback
 import uuid
 
 from tqdm import asyncio as tqdmasyncio
-from tqdm import tqdm
 
-import nltk
-from nltk.tokenize import sent_tokenize
-from transformers import AutoTokenizer
 import matplotlib.pyplot as plt
 from collections import Counter
 from typing import List, Tuple
 from math import ceil
-from aphrodite import SamplingParams
 
-from custom_nodes import logger, augmentoolkit
-import folder_paths
+if os.name == "posix":
+    try:
+        print("Attempting to import Aphrodite-engine for 'augmentoolkit_async_functions.py'...")
+        from aphrodite import (
+            SamplingParams,
+        )
+        APHRODITE_NOT_INSTALLED = False
+        print("Success!")
+    except:
+        print("Aphrodite-engine not installed. Only Llama CPP or API modes will run.")
+        APHRODITE_NOT_INSTALLED = True
 
-from custom_nodes.logger import logger
+from program_configs import get_config
+from engine import load_external_prompt_and_grammar
 
-from augmentoolkit import (
-    ASSISTANT_MODE, # Global variables
-    COMPLETION_MODE,
-    CONCURRENCY_LIMIT, 
-    DEBUG_MODE, 
-    DOUBLE_CHECK_COUNTER, 
-    GRAMMAR_DICT,
-    GRAPH,
-    MODE,
+from logger import logger
+
+from custom_nodes.augmentoolkit import (
     NAMES,
-    PROMPT_DICT,
-    REARRANGEMENTS_TO_TAKE,
-    USE_FILENAMES, 
-    USE_SUBSET, 
     extract_name, # Functions
     format_external_text_like_f_string,
     format_qatuples,
-    load_external_prompt_and_grammar,
-    override_prompt_and_grammar,
     strip_steps,
     write_output_to_file,
     special_instructions
@@ -307,7 +298,7 @@ async def check_answer(qatuple, LLM, permissive_mode=True):
                 re.DOTALL,
             )
             response = completion_pattern.search(completion).group(1).strip()
-            if DEBUG_MODE:
+            if get_config("DEBUG_MODE"):
                 logger.info(f"\n\RESPONSE:\n------\n{response}\n---------\n")
 
             if permissive_mode:
@@ -317,7 +308,7 @@ async def check_answer(qatuple, LLM, permissive_mode=True):
                 determination = determination_pattern.search(response).group(1).strip()
             else:
                 determination = response
-            if DEBUG_MODE:
+            if get_config("DEBUG_MODE"):
                 logger.info(f"\n\nDETERMINATION:\n------\n{determination}\n---------\n")
 
             if (
@@ -406,7 +397,7 @@ async def check_answer_relevancy_with_text(qatuple, LLM):
             # # print(response)
             determination = judgement_pattern.search(response).group(1).strip()
 
-            if DEBUG_MODE:
+            if get_config("DEBUG_MODE"):
                 logger.info(f"\n\nDETERMINATION:\n------\n{determination}\n---------\n")
 
             if (
@@ -482,7 +473,7 @@ async def check_qatuple_context(qatuple, LLM):
             completion = await engine_wrapper.submit(decision_prompt, sampling_params)
 
             end_time = time.time()
-            if DEBUG_MODE:
+            if get_config("DEBUG_MODE"):
                 logger.info(f"\n***Completion for async 'check_qatuple_context' function ***\n{completion}\n*** Completion for async 'generate_questions_plan' function ***")
             logger.info(f"Completion took {(end_time - start_time) / 60} minutes to generate.")
             logger.info(f"Completion for async 'check_qatuple_context' function for retry {retries} generated. Extracting response pattern...")
@@ -494,7 +485,7 @@ async def check_qatuple_context(qatuple, LLM):
             response = response_pattern.search(completion).group(1).strip()
 
             decision_pattern = re.compile(r"Final judgment:(.+)", re.IGNORECASE)
-            if DEBUG_MODE:
+            if get_config("DEBUG_MODE"):
                 logger.info(f"\n*** Response for async 'check_qatuple_context' function ***\n{response}\n*** Response for 'check_qatuple_context' function ***")
             
             determination = decision_pattern.search(response).group(1).strip()
@@ -579,14 +570,14 @@ async def check_question(qatuple, LLM):
                 re.DOTALL | re.IGNORECASE,
             )
             response = response_pattern.search(completion).group(1).strip()
-            if DEBUG_MODE:
+            if get_config("DEBUG_MODE"):
                 logger.info(f"\n\nRESPONSE:\n------\n{response}\n---------\n")
 
             decision_pattern = re.compile(
                 r"Final Judgment:(.+)", re.DOTALL | re.IGNORECASE
             )
             determination = decision_pattern.search(response).group(1).strip()
-            if DEBUG_MODE:
+            if get_config("DEBUG_MODE"):
                 logger.info(f"\n\nDETERMINATION:\n------\n{determination}\n---------\n")
 
             if (
@@ -685,7 +676,7 @@ async def generate_new_question(qatuple, LLM):
             logger.info(f"--QA TUPLE DURING NEW Q GEN--\n{qatuple}\n")
 
             completion = await engine_wrapper.submit(question_prompt, sampling_params)
-            if DEBUG_MODE:
+            if get_config("DEBUG_MODE"):
                 logger.info(f"COMPLETION:\n\n----------------------\n{completion}\n------------------")
 
             # Extract questions
@@ -693,7 +684,7 @@ async def generate_new_question(qatuple, LLM):
                 r"Question \(based on text\):\n(.+)", re.IGNORECASE | re.DOTALL
             )
             generation = response_pattern.search(completion).group(1)
-            if DEBUG_MODE:
+            if get_config("DEBUG_MODE"):
                 logger.info(f"GENERATION:\n\n-------------------\n{generation}\n-------------------")
                             
             pattern = re.compile(
@@ -741,13 +732,13 @@ async def generate_qatuples_from_para(idx, para, LLM=None, vetted_qa_tuples=None
                 continue
 
         question_group_id = make_id()
-        if DEBUG_MODE:
+        if get_config("DEBUG_MODE"):
             logger.info(f"\n\n\nOUTER LOOP CALL GENERATE QPLAN para: {para}, \n\n idx: {idx}")
 
         (plan, questions_plan_output,) = await generate_questions_plan(para, LLM)
         
         write_output_to_file(questions_plan_output, "./question_plan_generations", question_group_id)
-        if DEBUG_MODE:
+        if get_config("DEBUG_MODE"):
             logger.info(f"\n\n\nOUTER LOOP CALL GENERATE Q: {para}, \n\n idx: {idx} \n\n plan: {plan}")
 
         (question_answer_tuples, question_generation_output,) = await generate_questions(para, plan, LLM)
@@ -841,7 +832,7 @@ async def generate_questions(para_tuple, plan, LLM):
                 r"Questions \(make 4\):\n(.+)", re.IGNORECASE | re.DOTALL
             )
             generation = response_pattern.search(completion).group(1)
-            if DEBUG_MODE:
+            if get_config("DEBUG_MODE"):
                 logger.info(f"GENERATION:\n\n-------------------\n\n{generation}\n")
 
             pattern = re.compile(
@@ -935,7 +926,7 @@ async def generate_questions_plan(text, LLM):
             re.IGNORECASE | re.DOTALL,
         )
         generation = response_pattern.search(completion).group(1)
-        if DEBUG_MODE:
+        if get_config("DEBUG_MODE"):
             logger.info(f"GENERATION:\n\n-------------------\n\n{generation}")
 
     except Exception as e:
@@ -999,14 +990,14 @@ async def repair_qatuple_context(idx, tup, LLM, writepath, vetted_qa_tuples):
 async def vet_answer_accuracy_loop(qa_tuple, total_retries, run_id, LLM=None, double_check_counter=3):
     try:
         qtuple = qa_tuple
-        if DEBUG_MODE:
+        if get_config("DEBUG_MODE"):
             logger.info(f"\n\nStarting ACCURACY loop for question: {qtuple[0]}, context: {qtuple[2]}")
 
         passed_checks = 0
         times_checked = 0
         dissenting_reasoning = ""
         while times_checked < double_check_counter:
-            if DEBUG_MODE:
+            if get_config("DEBUG_MODE"):
                 logger.info(f"\n\nACCURACY CALL CHECK ANSWER: {qtuple[0]}, context: {qtuple[2]}, retries: {total_retries}, dissenting reasoning: {dissenting_reasoning}")
 
             judgement, answer_accuracy_output = await check_answer(qtuple, LLM)
@@ -1024,13 +1015,13 @@ async def vet_answer_accuracy_loop(qa_tuple, total_retries, run_id, LLM=None, do
                 break
 
         if passed_checks >= ceil(double_check_counter / 2):  # if question checks passed
-            if DEBUG_MODE:
+            if get_config("DEBUG_MODE"):
                 logger.info(f"\n\ANSWER ACCURACY CHECKS PASSED retries: {total_retries}")
 
             return qtuple
         else:
             # Generate new question and restart the loop
-            if DEBUG_MODE:
+            if get_config("DEBUG_MODE"):
                 logger.info(f"\n\nACCURACY CHECKS FAILED - SENDING BACK TO QUESTION LOOP retries: {total_retries}")
             total_retries += 1
 
@@ -1054,14 +1045,14 @@ async def vet_answer_accuracy_loop(qa_tuple, total_retries, run_id, LLM=None, do
 async def vet_answer_relevance_loop(qa_tuple, total_retries, run_id, LLM=None, double_check_counter=3):
     try:
         qtuple = qa_tuple
-        if DEBUG_MODE:
+        if get_config("DEBUG_MODE"):
             logger.info(f"\n\nStarting RELEVANCE loop for question: {qtuple[0]}, context: {qtuple[2]}")
 
         passed_checks = 0
         times_checked = 0
         dissenting_reasoning = ""
         while times_checked < double_check_counter:
-            if DEBUG_MODE:
+            if get_config("DEBUG_MODE"):
                 logger.info(f"\n\nRELEVANCE CALL CHECK ANSWER: {qtuple[0]}, context: {qtuple[2]}, retries: {total_retries}, dissenting reasoning: {dissenting_reasoning}")
 
             (judgement, answer_relevancy_output,) = await check_answer_relevancy_with_text(qtuple, LLM)
@@ -1113,7 +1104,7 @@ async def vet_answer_relevance_loop(qa_tuple, total_retries, run_id, LLM=None, d
 async def vet_question_loop(qa_tuple, total_retries, question_group_id=None, LLM=None, double_check_counter=3,):
     try:
         qtuple = qa_tuple
-        if DEBUG_MODE:
+        if get_config("DEBUG_MODE"):
             logger.info(f"\n\nStarting QUESTION loop for question: {qtuple[0]}, context: {qtuple[2]}")
 
         while total_retries <= 4:
@@ -1123,7 +1114,7 @@ async def vet_question_loop(qa_tuple, total_retries, question_group_id=None, LLM
             dissenting_reasoning = ""
 
             while times_checked < double_check_counter:
-                if DEBUG_MODE:
+                if get_config("DEBUG_MODE"):
                     logger.info(f"\n\nQUESTION CALL CHECK ANSWER: {qtuple[0]}, context: {qtuple[2]}, retries: {total_retries}, dissenting reasoning: {dissenting_reasoning}")
 
                 judgement, check_q_output = await check_question(qtuple, LLM)
@@ -1141,7 +1132,7 @@ async def vet_question_loop(qa_tuple, total_retries, question_group_id=None, LLM
                     break
 
             if passed_checks >= ceil(double_check_counter / 2): # if all question checks passed
-                if DEBUG_MODE:
+                if get_config("DEBUG_MODE"):
                     logger.info(f"\n\nQUESTION CHECKS PASSED retries: {total_retries}")
 
                 return await vet_answer_relevance_loop(
@@ -1153,7 +1144,7 @@ async def vet_question_loop(qa_tuple, total_retries, question_group_id=None, LLM
                 )
             else:
                 # Generate new question and restart the loop
-                if DEBUG_MODE:
+                if get_config("DEBUG_MODE"):
                     logger.info(f"\n\nQUESTION CHECKS FAILED - GENERATING NEW QUESTION retries: {total_retries}")
                 total_retries += 1
 
@@ -1263,7 +1254,7 @@ async def create_scenario_plan_many_tuples(qatuples, character, LLM):
         # Even if the example does a justified clever trick, the model imitating it may fuck up the trick. 
         # So try to avoid complex things that aren't needed for the task in examples, like the "just how much have you dug" colloquialization. 
         # Exact quotes for the questions and answers.
-        if DEBUG_MODE:
+        if get_config("DEBUG_MODE"):
             logger.info(f"\n\COMPLETION:\n------\n{completion}\n---------\n")
 
         # Extract plan
@@ -1272,13 +1263,13 @@ async def create_scenario_plan_many_tuples(qatuples, character, LLM):
             re.IGNORECASE | re.DOTALL,
         )
         generation = response_pattern.search(completion).group(1)
-        if DEBUG_MODE:
+        if get_config("DEBUG_MODE"):
             logger.info(f"GENERATION:\n\n-------------------\n\n{generation}")
 
         if not ("Albert" in charname):
            if "Albert" in generation:
                 print("Random Name was used instead of Albert")
-            generation = generation.replace("Albert", random_name())
+                generation = generation.replace("Albert", random_name())
 
     except Exception as e:
         logger.exception(f"An Exception occured in 'generate_questions' function: {e}")
@@ -1365,7 +1356,7 @@ async def create_scenario_many_tuples(qatuples, character, plan, LLM, assistant_
             )
 
             completion = await engine_wrapper.submit(cot_prompt, sampling_params)
-            if DEBUG_MODE:
+            if get_config("DEBUG_MODE"):
                 logger.info(f"\n\COMPLETION:\n------\n{completion}\n---------\n")
 
             # Extract plan
@@ -1374,7 +1365,7 @@ async def create_scenario_many_tuples(qatuples, character, plan, LLM, assistant_
                 re.IGNORECASE | re.DOTALL,
             )
             generation = response_pattern.search(completion).group(1)
-            if DEBUG_MODE:
+            if get_config("DEBUG_MODE"):
                 logger.info(f"\n\GENERATION:\n------\n{completion}\n---------\n")
 
             if not ("Albert" in charname):
@@ -1533,7 +1524,7 @@ async def create_character_card_many_tuples(qatuples, plan, instructions, LLM, c
         end_time = time.time()
         logger.info(f"Completion took {(end_time - start_time) / 60} minutes to generate.")
         logger.info(f"Completion for 'create_character_card_plan_many_tuples' function generated. Extracting response pattern...")
-        if DEBUG_MODE:
+        if get_config("DEBUG_MODE"):
             logger.info(f"COMPLETION:\n\n----------------------\n{completion}\n------------------")
 
         # Extract plan
@@ -1543,7 +1534,7 @@ async def create_character_card_many_tuples(qatuples, plan, instructions, LLM, c
         )
 
         generation = response_pattern.search(completion).group(1)
-        if DEBUG_MODE:
+        if get_config("DEBUG_MODE"):
             logger.info(f"GENERATION:\n\n-------------------\n\n{generation}\n")
 
     except Exception as e:
@@ -1607,7 +1598,7 @@ async def create_character_card_plan_many_tuples(qatuples, LLM):
         )
 
     completion = await engine_wrapper.submit(cot_prompt, sampling_params)
-    if DEBUG_MODE:
+    if get_config("DEBUG_MODE"):
         logger.info(f"\n\COMPLETION:\n------\n{completion}\n---------\n")
 
     # Extract plan
@@ -1616,7 +1607,7 @@ async def create_character_card_plan_many_tuples(qatuples, LLM):
         re.IGNORECASE | re.DOTALL,
     )
     generation = response_pattern.search(completion).group(1)
-    if DEBUG_MODE:
+    if get_config("DEBUG_MODE"):
         logger.info(f"\n\GENERATION:\n------\n{completion}\n---------\n")
 
     return generation, instructions_string, completion
@@ -1964,7 +1955,7 @@ async def multi_turn_conversation(qatuples, character, scenario, scenario_plan, 
     end_time = time.time()
     logger.info(f"Done! Completion took {(end_time - start_time) / 60} minutes to generate.")
     logger.info(f"Completion for async 'multi_turn_conversation' function generated. Extracting response pattern...")
-    if DEBUG_MODE:
+    if get_config("DEBUG_MODE"):
         logger.info(f"\n*** async multi_turn_conversation COMPLETION ***: \n{completion}\n *** async multi_turn_conversation COMPLETION ***\n")
 
     # Extract plan
@@ -1974,7 +1965,7 @@ async def multi_turn_conversation(qatuples, character, scenario, scenario_plan, 
     )
 
     generation = response_pattern.search(completion).group(1)
-    if DEBUG_MODE:
+    if get_config("DEBUG_MODE"):
         logger.info(f"\n*** async multi_turn_conversation GENERATION:***\n\n-------------------\n\n {generation} \n*** async multi_turn_conversation GENERATION: ***\n\n-------------------\n\n")
 
     # return (generation,"AI Assistant","A conversation between a helpful AI Assistant, and a user.","N/A",qatuples), completion
@@ -2415,10 +2406,12 @@ def call_all_processors(multiturn_conversation, qatuples):
 def random_name():
     return random.choice(NAMES)
 
+
+"""
 def sanity_check(logic_llm):
     retries = 0
     while retries <= 4:
-        decision_prompt = f"""Hi there, """
+        decision_prompt = fHi there,
         # print("DEBUG\n\n" + prompt=decision_prompt)
         completion = llm_call(
             prompt=decision_prompt,
@@ -2431,7 +2424,8 @@ def sanity_check(logic_llm):
         # print(completion)
 
         return
-
+"""
+        
 def combine_traits(personality_matrix):  # GPT-generated
     # Using itertools.product to generate all possible combinations
     combinations = itertools.product(*personality_matrix)
@@ -2521,107 +2515,6 @@ The character should be narcissistic."""
 
     # Return the combined string, with each sentence on a new line
     return selected_traits[0]
-
-
-class EngineWrapper:
-    def __init__(self, model, 
-                 api_key=None, 
-                 base_url=None, 
-                 mode="api", # can be one of api, aphrodite, llama.cpp
-                 quantization="gptq", # only needed if using aphrodite mode
-                ):
-        if mode == "aphrodite":
-            engine_args = AsyncEngineArgs(
-                model=model,
-                quantization=quantization,
-                engine_use_ray=False,
-                disable_log_requests=True,
-                max_model_len=12000,
-                dtype="float16"
-            )
-            self.engine = AsyncAphrodite.from_engine_args(engine_args)
-        self.mode = mode
-        self.client = AsyncOpenAI(api_key=api_key, base_url=base_url)
-        self.model = model
-
-    async def submit_completion(self, prompt, sampling_params):  # Submit request and wait for it to stream back fully
-        if "temperature" not in sampling_params:
-            sampling_params["temperature"] = 1
-        if "top_p" not in sampling_params:
-            sampling_params["top_p"] = 1
-        if "max_tokens" not in sampling_params:
-            sampling_params["max_tokens"] = 3000
-        if "stop" not in sampling_params:
-            sampling_params["stop"] = []
-        if "n_predict" not in sampling_params and self.mode == "llamacpp":
-            sampling_params["n_predict"] = sampling_params["max_tokens"]
-
-        if DEBUG_MODE:
-            logger.info(f"\n\nSETTINGS DUMP\n\nmodel:{self.model}\nprompt:{prompt}\ntemperature:{sampling_params['temperature']}\ntop_p:{sampling_params['top_p']}\nmax_tokens:{sampling_params['max_tokens']}\n")
-
-        if self.mode == "llamacpp":
-            return await make_async_api_call(prompt=prompt, sampling_parameters=sampling_params)
-        
-        if self.mode == "aphrodite":
-            aphrodite_sampling_params = SamplingParams(**sampling_params)
-            request_id = make_id()
-            outputs = []
-            # self.engine.add_request(request_id,prompt,sampling_params) #old sync code
-            final_output = None
-            async for request_output in self.engine.generate(
-                prompt, aphrodite_sampling_params, request_id
-            ):
-                outputs.append(request_output.outputs[0].text)
-                final_output = request_output
-
-            # full_output = "".join(outputs)
-            return final_output.prompt + final_output.outputs[0].text
-        
-        if self.mode == "api":
-            completion = await self.client.completions.create(
-                model=self.model,
-                prompt=prompt,
-                temperature=sampling_params["temperature"],
-                top_p=sampling_params["top_p"],
-                stop=sampling_params["stop"],
-                max_tokens=sampling_params["max_tokens"],
-            )
-            completion = completion.choices[0].text
-            return prompt + completion
-    
-    async def submit_chat(self, messages, sampling_params):  # Submit request and wait for it to stream back fully
-
-        if "temperature" not in sampling_params:
-            sampling_params["temperature"] = 1
-        if "top_p" not in sampling_params:
-            sampling_params["top_p"] = 1
-        if "max_tokens" not in sampling_params:
-            sampling_params["max_tokens"] = 3000
-        if "stop" not in sampling_params:
-            sampling_params["stop"] = []
-        
-        if self.mode == "llamacpp":
-            return await make_async_api_call(messages=messages, sampling_parameters=sampling_params)
-        elif self.mode == "api":
-            messages_cleaned = [
-                {
-                 "role": message["role"], 
-                 "content": message["content"].replace("\\n","\n")
-                } for message in messages
-            ]
-            completion = await self.client.chat.completions.create(
-                model=self.model,
-                messages=messages_cleaned,
-                temperature=sampling_params["temperature"],
-                top_p=sampling_params["top_p"],
-                stop=sampling_params["stop"],
-                max_tokens=sampling_params["max_tokens"],
-            )
-            completion = completion.choices[0].message.content
-            return completion
-        else:
-            raise Exception("Aphrodite not compatible with chat mode!")
-
 
 
 

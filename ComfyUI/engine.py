@@ -19,7 +19,7 @@ import folder_paths
 
 if os.name == "posix":
     try:
-        print("Augmentoolkit.py attempting to import Aphrodite-engine...")
+        print("engine.py attempting to import Aphrodite-engine...")
         from aphrodite import (
             EngineArgs,
             AphroditeEngine,
@@ -28,6 +28,7 @@ if os.name == "posix":
             AsyncEngineArgs,
         )
         APHRODITE_NOT_INSTALLED = False
+        print("Success!")
     except:
         print("Aphrodite-engine not installed. Only Llama CPP or API modes will run.")
         APHRODITE_NOT_INSTALLED = True
@@ -51,6 +52,7 @@ json_structure = [
     {"role": "assistant", "content": ""},
 ]
 prompts_dir = os.path.join(base_path, "prompts")
+
 for filename in os.listdir(prompts_dir):
     if filename.endswith(".txt"):
         # Construct the path to the current file
@@ -118,6 +120,29 @@ for file_name in folder_paths.get_filename_list("grammars"):
     except Exception as e:
         logger.exception(f"An Exception occured when creating the grammar dictionary object: {e} ")
         raise e
+
+
+def escape_unescaped_quotes(s):
+    # Initialize a new string to store the result
+    result = ""
+    # Iterate through the string, keeping track of whether the current character is preceded by a backslash
+    i = 0
+    while i < len(s):
+        # If the current character is a quote
+        if s[i] == '"':
+            # Check if it's the first character or if the preceding character is not a backslash
+            if i == 0 or s[i - 1] != "\\":
+                # Add an escaped quote to the result
+                result += r"\""
+            else:
+                # Add the quote as is, because it's already escaped
+                result += '"'
+        else:
+            # Add the current character to the result
+            result += s[i]
+        i += 1
+    return result
+
 
 # IMPORTANT FUNCTION: Do not change lightly as it's used by a fuck-ton of different functions.
 # TODO: Test to see if function calls actually work inside this.
@@ -304,7 +329,7 @@ class EngineWrapper:
             return prompt + completion
     
     async def submit_chat(
-    self, messages, sampling_params
+        self, messages, sampling_params
     ):  # Submit request and wait for it to stream back fully
         if "temperature" not in sampling_params:
             sampling_params["temperature"] = 1
@@ -322,8 +347,13 @@ class EngineWrapper:
             if get_config("DEBUG_MODE"):
                 logger.info(f"\n\n\nMESSAGES\n\n\n{messages}\n")
 
-            messages_cleaned = [{"role": message["role"], "content": message["content"].replace("\\n","\n")} for message in messages]
-            
+            messages_cleaned = [
+                {
+                    "role": message["role"], 
+                    "content": message["content"].replace("\\n","\n")
+                } for message in messages
+            ]
+
             if get_config("DEBUG_MODE"):
                 logger.info(f"\n\n\nMESSAGES CLEANED\n\n\n{messages_cleaned}\n")
 
@@ -404,52 +434,64 @@ class GenerationStep:
             else:
                 full_prompt_path = os.path.join(folder_paths.get_default_prompts_directory(), self.prompt_path)
 
-            for key in arguments.keys():
-                logger.info(f"argument: \n----------------\n{key}\n----------------\n")
+            if get_config("DEBUG_MODE"):
+                for key in arguments.keys():
+                    logger.info(f"key: \n----------------\n{key}\n----------------\n")
+                for arg in arguments.items():
+                    logger.info(f"arg: \n----------------\n{arg}\n----------------\n")
 
             try:
                 if full_prompt_path.endswith(".json"): #JSON route. This is a slightly-modified version of augmentoolkit's original prompt import code.
                     with open(full_prompt_path, 'r') as pf:
                         prompt = pf.read()
-                        #if get_config("DEBUG_MODE"):
-                            #logger.info(f"Input Prompt: JSON route \n----------------\n{prompt}\n----------------\n")
+                        if get_config("DEBUG_MODE"):
+                            logger.info(f"Input Prompt: JSON route \n----------------\n{prompt}\n----------------\n")
                         # Code to ensure that interpolation works, but curly braces are still allowed in the input
                         # 1. Escape all curly braces
                         prompt_escaped = prompt.replace('{', '{{').replace('}', '}}')
                         # 2. Unescape curly braces that are associated with input keys
                         for key in arguments.keys():
                             prompt_escaped = prompt_escaped.replace(f"{{{{{key}}}}}", f"{{{key}}}") # Somehow this works
+
+                        # escape the quotes in the argument values
+                        for key in arguments:
+                            arguments[key] = escape_unescaped_quotes(arguments[key])
+
+                        if get_config("DEBUG_MODE"):
+                            for arg in arguments.items():
+                                logger.info(f"assigned arg: \n----------------\n{arg}\n----------------\n")                          
+                        
                         # 3. Format
                         prompt_formatted = prompt_escaped.format(**arguments)
 
-                        #if get_config("DEBUG_MODE"):
-                         #   logger.info(f"Formatted Prompt: JSON route \n----------------\n{prompt_formatted}\n----------------\n")
+                        if get_config("DEBUG_MODE"):
+                            logger.info(f"Formatted Prompt: JSON route \n----------------\n{prompt_formatted}\n----------------\n")
+
                 else: # The PROMPT_DICT route, where the prompts are already loaded into ComfyUI.
                     prompt_name = os.path.splitext(os.path.basename(full_prompt_path))[0] # Extract the prompt name from its file path.
 
-                    #if get_config("DEBUG_MODE"):
-                    #     logger.info(f"Input Prompt: Prompt Dict route \n----------------\n{prompt_name}\n----------------\n")
+                    if get_config("DEBUG_MODE"):
+                        logger.info(f"Input Prompt: Prompt Dict route \n----------------\n{prompt_name}\n----------------\n")
 
                     prompt_formatted, _ = load_external_prompt_and_grammar(prompt_name, "dummy_grammar", arguments) # Load the prompt with its arguments filled in.
                     
-                    #if get_config("DEBUG_MODE"):
-                        #logger.info(f"Formatted Prompt: Prompt Dict route \n----------------\n{prompt_formatted}\n----------------\n")
+                    if get_config("DEBUG_MODE"):
+                        logger.info(f"Formatted Prompt: Prompt Dict route \n----------------\n{prompt_formatted}\n----------------\n")
 
             except Exception as e: # Since override isn't file-based, we can use invalid path errors to signal the Generator to process self.prompt_path as a regular string.
                 prompt_formatted = format_external_text_like_f_string(self.prompt_path, arguments)
-                #if get_config("DEBUG_MODE"):
-                    #logger.info(f"Formatted Prompt: Direct String route \n----------------\n{prompt_formatted}\n----------------\n")
-                    #logger.info(f"EXCEPTION in 'generate' function in class GenerationStep: {e}")
-                    #raise e
+                if get_config("DEBUG_MODE"):
+                    logger.info(f"Formatted Prompt: Direct String route \n----------------\n{prompt_formatted}\n----------------\n")
+                    logger.info(f"EXCEPTION in 'generate' function in class GenerationStep: {e}")
 
         except Exception as e:
             logger.exception(f"An exception occured when trying to load the prompt '{self.prompt_path}': {e}")
 
         times_tried = 0
-        if self.completion_mode or self.engine_wrapper.mode == "aphrodite": #Force completion mode if the LLM's type is aphrodite.
+        if self.completion_mode or self.engine_wrapper['type'] == "aphrodite": #Force completion mode if the LLM's type is aphrodite.
             while times_tried <= self.retries:
                 try:
-                    response = await self.engine_wrapper.submit_completion(prompt_formatted, self.sampling_params)
+                    response = await self.engine_wrapper['llm'].submit_completion(prompt_formatted, self.sampling_params)
                     filtered_response = re.search(self.regex, response).group(1)
                     ret = self.output_processor(filtered_response)
                     if self.return_input_too:
@@ -459,9 +501,8 @@ class GenerationStep:
                     if get_config("DEBUG_MODE"):
                         logger.error(f"Error in Generation Step: {e}")
                     try:
-                        if not self.engine_wrapper.mode == "llamacpp":
-                            print("Response:")
-                            print(response)
+                        if not self.engine_wrapper['type'] == "llamacpp":
+                            print(f"Response:\n{response}")
                     except:
                         pass
                     traceback.print_exc()
@@ -471,7 +512,7 @@ class GenerationStep:
             while times_tried <= self.retries:
                 try:
                     messages = json.loads(prompt_formatted)
-                    response = await self.engine_wrapper.submit_chat(messages, self.sampling_params)
+                    response = await self.engine_wrapper['llm'].submit_chat(messages, self.sampling_params)
                     filtered_response = response.replace('"','\\"').replace("\n","\\n")
                     ret = self.output_processor(filtered_response)
                     if self.return_input_too:

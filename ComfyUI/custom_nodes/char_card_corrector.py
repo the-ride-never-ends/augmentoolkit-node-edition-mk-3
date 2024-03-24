@@ -15,8 +15,7 @@ import re
 import sys
 import time
 from numpy import mean
-from numpy.random import f
-from scipy import rand
+from numpy.random import f, rand
 import torch
 import traceback
 import uuid
@@ -33,24 +32,28 @@ import comfy.utils
 import comfy.model_management
 from comfy.cli_args import args
 
-from custom_nodes.logger import logger
+from logger import logger
 import folder_paths
-
+from program_configs import get_config
+from engine import GenerationStep
 
 COMPLETION_MODE = True
 USE_FILENAMES = False
 LOG_LEVEL = None
 
-
 PROMPT_DICT = {}
+# Create dictionaries for the prompts and grammars from the txt files in the prompts and grammars folders. 
+# The prompt names from the dictionary must match the name of the function they go to.
+PROMPT_DICT = {'default_prompts': {}} 
 for file_name in folder_paths.get_filename_list("prompts"):
     try:
         file_path = folder_paths.get_full_path("prompts", file_name)
         with open(file_path, 'r', encoding='utf-8') as file:
             key = os.path.splitext(file_name)[0]
-            PROMPT_DICT[key] = file.read()
+            PROMPT_DICT[f'{key}'] = file.read()
     except Exception as e:
         logger.exception(f"An Exception occured when creating the prompt dictionary object: {e} ")
+        raise e
 
 # Load the default prompts into the PROMPT_DICT object
 for file_name in folder_paths.get_filename_list("default_prompts"):
@@ -58,10 +61,12 @@ for file_name in folder_paths.get_filename_list("default_prompts"):
         file_path = folder_paths.get_full_path("default_prompts", file_name)
         with open(file_path, 'r', encoding='utf-8') as file:
             key = os.path.splitext(file_name)[0]
-            PROMPT_DICT['default_prompts'][key] = file.read()
+            PROMPT_DICT['default_prompts'][f'{key}'] = file.read()
     except Exception as e:
         logger.exception(f"An Exception occured when creating the default_prompts in the prompt dictionary object: {e} ")
+        raise e
 
+"""
 TEST_DICT = {}
 for file_name in folder_paths.get_filename_list("tests"):
     try:
@@ -71,18 +76,18 @@ for file_name in folder_paths.get_filename_list("tests"):
             TEST_DICT[key] = file.read()
     except Exception as e:
         logger.exception(f"An Exception occured when creating the prompt dictionary object: {e} ")
-
+"""
 
 # Set up rate-limit-conscious functions
-SEMAPHORE = asyncio.Semaphore(CONCURRENCY_LIMIT)
+SEMAPHORE = asyncio.Semaphore(get_config("CONCURRENCY_LIMIT"))
 
 # Function to prevent rate-limits overruns.
-async def run_task_with_limit(task: Callable):
+async def run_task_with_limit(task):
     async with SEMAPHORE:
         # Run your task here
         return await task
 
-async def limited_tasks(tasks: Callable):
+async def limited_tasks(tasks):
     limited_tasks_infocreation = [run_task_with_limit(task) for task in tasks]
 
     async def process_tasks(future, as_completed, limited_tasks_infocreation):
@@ -103,9 +108,6 @@ OpenToM: A Comprehensive Benchmark for Evaluating
 Theory-of-Mind Reasoning Capabilities of Large Language Models
 https://arxiv.org/pdf/2402.06044.pdf
 """
-
-
-
 
 
 class TorrenceTest:
@@ -170,7 +172,7 @@ class TorrenceTest:
            Act like a typical {role}.\n
            Do the following task or answer the following question.\n
            {task_type}\n
-           There are no right or wrong answers, we’re interested in how many different problems you can identify and the variety of issues you consider. 
+           There are no right or wrong answers, we're interested in how many different problems you can identify and the variety of issues you consider. 
            Try to think outside the box and consider as many potential problems as possible.\n
            The scenario is:\n
            {question}\n
@@ -230,11 +232,11 @@ class TorrenceTest:
                 "top_k": top_k_arg,
                 "top_p": top_p_arg,
             },
-            completion_mode=COMPLETION_MODE,
+            completion_mode=get_config("COMPLETION_MODE"),
             retries=1,
             engine_wrapper=engine_wrapper,
-            prompt_folder=PROMPTS,
-            default_prompt_folder=DEFAULT_PROMPTS
+            prompt_folder=get_config("PROMPTS"),
+            default_prompt_folder=get_config("DEFAULT_PROMPTS")
         )
 
         creative_response = await creative_response.generate() # TODO add arguments here when the prompts are externalized.
@@ -277,11 +279,10 @@ class TorrenceTest:
                         "top_p": top_p_arg,
                     },
                     completion_mode=completion_mode,
-                    logging_level=logging_level,
                     retries=1,
                     engine_wrapper=engine_wrapper,
-                    prompt_folder=PROMPTS,
-                    default_prompt_folder=DEFAULT_PROMPTS
+                    prompt_folder=get_config("PROMPTS"),
+                    default_prompt_folder=get_config("DEFAULT_PROMPTS")
                 )
 
             judgement_response = await judgement_response.generate() 
@@ -344,7 +345,7 @@ class TorrenceTest:
 
     CATEGORY = "benchmarks/advanced"
 
-    @conditional_log_arguments
+    #@conditional_log_arguments
     def return_torrence_test(self, LLM, max_tokens_arg, temperature_arg, top_k_arg, top_p_arg, roles, prompt_type, seed_arg):
 
         # Look up the json files in the tests folder.
@@ -367,9 +368,8 @@ class TorrenceTest:
             self.torrence_test(
                 idx, task,
                 LLM, 
-                COMPLETION_MODE, 
-                use_filenames=USE_FILENAMES, 
-                completion_mode=COMPLETION_MODE, 
+                completion_mode=get_config("COMPLETION_MODE"), 
+                use_filenames=get_config("USE_FILENAMES"), 
                 logging_level=LOG_LEVEL) for idx, task in enumerate(torrence_test)
         ]
         limited_tasks_torrence_test = [run_task_with_limit(task) for task in tasks]
@@ -379,7 +379,7 @@ class TorrenceTest:
 
         return (average_score, fluency_score, flexibility_score, originality_score, elaboration_score),
 
-
+"""
 task
     task_type
     question
@@ -401,7 +401,7 @@ task
         # Common Problem Task
         # Improvement Task
         # Imaginative Stories Task
-
+"""
 
 
 

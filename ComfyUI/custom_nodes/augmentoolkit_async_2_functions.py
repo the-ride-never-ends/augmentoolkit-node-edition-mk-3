@@ -1,23 +1,24 @@
 import aiohttp
 import asyncio
-import re
+import glob
+import json
+import itertools
+import logging
+import fcntl
 import random
+import re
 import os
 import traceback
-import json
-import logging
-import random
-import itertools
-import glob
 import uuid
-from zoneinfo import InvalidTZPathWarning
 
+import matplotlib.pyplot as plt
+
+from collections import Counter
 from math import ceil
-from typing import Any, List, Tuple, Union
 from tqdm import asyncio as tqdmasyncio
 from tqdm import tqdm
-import matplotlib.pyplot as plt
-from collections import Counter
+from typing import Any, List, Tuple, Union
+from zoneinfo import InvalidTZPathWarning
 
 import folder_paths
 from program_configs import get_config
@@ -439,7 +440,7 @@ def group_by_text(tuples_list):
 
 
 def extract_reasoning_from_context_check(response):
-    decision_pattern = re.compile(r"Final judgment:(.+)", re.IGNORECASE)
+    decision_pattern = re.compile(r"Final judgment:([\s\S]*)", re.IGNORECASE)
     determination = decision_pattern.search(response).group(1).strip()
     if "pass" in determination.lower():
         print("Leaving be...")
@@ -470,7 +471,7 @@ async def repair_qatuple_context(
         context_repairer_path = context_repairer_path + ".json"
         
     repair_context_regex = re.compile(
-                r"Reasoning and thought process \(be thorough\):(.+)",
+                r"Reasoning and thought process \(be thorough\):([\s\S]*)",
                 re.DOTALL | re.IGNORECASE,
             )
     context_repairer = GenerationStep(
@@ -554,7 +555,7 @@ async def repair_qatuple_context(
 
 def parse_answer_accuracy_validation(response):
     determination_pattern = re.compile(
-        r"Overall Accuracy Determination:(.+)", re.DOTALL
+        r"Overall Accuracy Determination:([\s\S]*)", re.DOTALL
     )
     determination = determination_pattern.search(response).group(1).strip()
     if (
@@ -701,7 +702,7 @@ async def vet_answer_accuracy_loop(
 
 def parse_answer_relevancy_validation_step(thought_process):
     judgement_pattern = re.compile(
-        r"Explanation of Judgment:(.+)", re.DOTALL | re.IGNORECASE
+        r"Explanation of Judgment:([\s\S]*)", re.DOTALL | re.IGNORECASE
     )
     determination = judgement_pattern.search(thought_process).group(1).strip()
     if (
@@ -733,7 +734,7 @@ async def vet_answer_relevance_loop(
     # NOTE Set up answer check generation step
     prompt_path_ans_relevancy_check = "check_answer_relevancy_with_text"
     check_ans_relevancy_regex = re.compile(
-                r"Reasoning and thought process \(be careful about extra details, even vague ones\):\n(.+)",
+                r"Reasoning and thought process \(be careful about extra details, even vague ones\):([\s\S]*)",
                 re.DOTALL | re.IGNORECASE,
     )
     
@@ -855,7 +856,7 @@ async def vet_answer_relevance_loop(
 
 def parse_validation_step(response):
     decision_pattern = re.compile(
-                r"Final Judgment:(.+)", re.DOTALL | re.IGNORECASE
+                r"Final Judgment:([\s\S]*)", re.DOTALL | re.IGNORECASE
             )
     determination = decision_pattern.search(response).group(1).strip()
     if (
@@ -887,7 +888,7 @@ async def vet_question_loop(
     # NOTE Set up question check generation step
     prompt_path_q_check = "check_question"
     check_q_regex = re.compile(
-                r"Reasoning and thought process \(be careful around \"how\" and \"why\" questions\):(.+)",
+                r"Reasoning and thought process \(be careful around \"how\" and \"why\" questions\):([\s\S]*)",
                 re.DOTALL | re.IGNORECASE,
             )
 
@@ -927,7 +928,7 @@ async def vet_question_loop(
         prompt_path_new_q_gen = "new_q_gen_filenames"
     
     new_q_gen_regex = re.compile(
-        r"Question \(based on text\):\n(.+)", re.IGNORECASE | re.DOTALL
+        r"Question \(based on text\):([\s\S]*)", re.IGNORECASE | re.DOTALL
     )
     
     if completion_mode:
@@ -1195,7 +1196,7 @@ async def generate_qatuples_from_para(
         prompt_path_qatuples_plan = "qatuples_plan_filenames"
     
     qatuples_plan_regex = re.compile(
-        r"Reasoning and thought process \(being careful to only plan questions that are entirely based on the text provided\):\n(.+)",
+        r"Reasoning and thought process \(being careful to only plan questions that are entirely based on the text provided\):([\s\S]*)",
         re.IGNORECASE | re.DOTALL,
     )
     
@@ -1244,7 +1245,8 @@ async def generate_qatuples_from_para(
         prompt_path_qatuples_gen = prompt_path_qatuples_gen + ".json"
     
     qatuples_gen_regex = re.compile(
-        r"Questions \(make 4\):\n(.+)", re.IGNORECASE | re.DOTALL
+        r"Questions \(make 4\):([\s\S]*)", 
+        re.IGNORECASE | re.DOTALL
     )
     if completion_mode:
         qatuples_generator = GenerationStep(
@@ -1323,15 +1325,16 @@ async def generate_qatuples_from_para(
             questions_plan_output,
         ) = await qatuples_planner.generate(
             arguments={
-                "textdetails": para[1],
+                "textdetails": 
+                [1],
                 "text": para[0]
             }
         )
         write_output_to_file(
-            questions_plan_output, get_config("OUTPUT") + "/question_plan_generations", question_group_id
+            questions_plan_output, folder_paths.get_output_directory() + "/question_plan_generations", question_group_id
         )
         if get_config("DEBUG_MODE"):
-            logger.inf(f"\n\n\nOUTER LOOP CALL GENERATE Q: {para}, \n\n idx: {idx} \n\n plan: {plan}")
+            logger.info(f"\n\n\nOUTER LOOP CALL GENERATE Q: {para}, \n\n idx: {idx} \n\n plan: {plan}")
 
         (
             question_answer_tuples,
@@ -1418,18 +1421,21 @@ async def determine_worthy(
     p,
     judged_worthy_for_questions,
     output_dir,
-    judge, #GenerationStep
+    judge: GenerationStep,
 ):
     # for idx, p in tqdm(enumerate(paragraphs_processed[:10])):
     file_name = f"{idx}.json"
     file_path = os.path.join(output_dir, file_name)
+
     # Check if the judgement for this paragraph already exists
     if os.path.isfile(file_path):
         with open(file_path, "r") as file:
             data = json.load(file)
             print("LOADING: ", data)
         if isinstance(data, str):
-            judged_worthy_for_questions.append((None, data[7:])) # hacky way of appending only the text name. See the file output of a failed judgement for details (Takes after "failed|")
+            judged_worthy_for_questions.append(
+                (None, data[7:])
+            ) # hacky way of appending only the text name. See the file output of a failed judgement for details (Takes after "failed|")
         else:
             judged_worthy_for_questions.append((data["paragraph"], data["metadata"]))
     else:
@@ -1476,7 +1482,7 @@ def judge_paragraph_processor(determination): # TODO extract to separate file to
 async def filter_all_questions(
     paragraphs_processed,
     judged_worthy_for_questions,
-    engine_wrapper,
+    LLM, #Engine Wrapper
     output_dir,
     take_subset=False,
     use_filenames=False,
@@ -1491,7 +1497,9 @@ async def filter_all_questions(
         prompt_path = "judge_paragraph_no_filenames"
 
     judgement_regex = re.compile(
-            r"Reasoning and thought process \(reason intelligently\):(.+)", re.DOTALL | re.IGNORECASE,)
+            r"Reasoning and thought process \(reason intelligently\):([\s\S]*)", 
+            re.DOTALL | re.IGNORECASE,
+    )
     
     if completion_mode:
         prompt_path = prompt_path + ".txt"
@@ -1517,7 +1525,7 @@ async def filter_all_questions(
         },
         completion_mode=completion_mode,
         retries=2,
-        engine_wrapper=engine_wrapper,
+        engine_wrapper=LLM,
         logging_level=logging_level, # TODO change to warning
         output_processor=judge_paragraph_processor,
         return_input_too=False,
@@ -1535,7 +1543,7 @@ async def filter_all_questions(
             )
             for idx, p in enumerate(paragraphs_processed)
         ]
-    else:
+    else: # Takes the first 13 elements as a subset
         tasks = [
             determine_worthy(
                 idx,
@@ -1544,7 +1552,7 @@ async def filter_all_questions(
                 output_dir,
                 judge
             )
-            for idx, p in enumerate(paragraphs_processed[:13])
+            for idx, p in enumerate(paragraphs_processed[:13]) 
         ]
     limited_tasks = [rtwl(task) for task in tasks]
     for future in tqdmasyncio.tqdm.as_completed(limited_tasks):
@@ -1641,7 +1649,7 @@ def create_character_info_generators(completion_mode=None, LLM=None,logging_leve
         character_card_plan_path = "create_character_card_plan"
         
     character_card_plan_regex = re.compile(
-        r"Character card plan \(be creative, do not use real people as characters, do NOT make the author of the book a character\):\n(.+)",
+        r"Character card plan \(be creative, do not use real people as characters, do NOT make the author of the book a character\):([\s\S]*)",
         re.IGNORECASE | re.DOTALL,
     )
 
@@ -1692,7 +1700,7 @@ def create_character_info_generators(completion_mode=None, LLM=None,logging_leve
         character_card_path = "create_character_card"
 
     character_card_regex = re.compile(
-        r"Character card \(be creative, write at least 3 paragraphs for each dialogue line\):\n(.+)",
+        r"Character card \(be creative, write at least 3 paragraphs for each dialogue line\):([\s\S]*)",
         re.IGNORECASE | re.DOTALL,
     )
 
@@ -1750,7 +1758,7 @@ def create_character_info_generators(completion_mode=None, LLM=None,logging_leve
     scenario_plan_path = "create_scenario_plan" # no variation between use of filenames or not for scenarios
     
     scenario_plan_regex = re.compile(
-        r"Scenario plan \(be creative, and make sure all characters present fit in with the setting\):\n(.+)",
+        r"Scenario plan \(be creative, and make sure all characters present fit in with the setting\):([\s\S]*)",
         re.IGNORECASE | re.DOTALL,
     )
     
@@ -1793,7 +1801,7 @@ def create_character_info_generators(completion_mode=None, LLM=None,logging_leve
     scenario_path = "create_scenario" # no variation between use of filenames or not for scenarios
     
     scenario_regex = re.compile(
-        r"Scenario \(will have no dialogue, will just set up the scene\):\n(.+)",
+        r"Scenario \(will have no dialogue, will just set up the scene\):([\s\S]*)",
         re.IGNORECASE | re.DOTALL,
     )
     
@@ -1960,7 +1968,7 @@ async def create_conversation(
     charname = extract_name(character)
     
     conversation_regex = re.compile(
-        f"Conversation that answers the provided question \(be sure that you do not change the questions or answers themselves; {charname} will answer the questions, not ask them; the questions and answers provided should be copied word for word, and surrounded by compelling conversation\):\n(.+)",
+        f"Conversation that answers the provided question \(be sure that you do not change the questions or answers themselves; {charname} will answer the questions, not ask them; the questions and answers provided should be copied word for word, and surrounded by compelling conversation\):([\s\S]*)",
         re.IGNORECASE | re.DOTALL,
     )
     
